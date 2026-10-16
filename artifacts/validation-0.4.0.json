@@ -1,0 +1,279 @@
+{
+  "version": "0.4.0",
+  "version_code": 6,
+  "package": "br.com.myfinancehub",
+  "minimum_api": 26,
+  "target_api": 35,
+  "financial_schema": 2,
+  "financial_backup_version": 2,
+  "accepted_backup_versions": [
+    1,
+    2
+  ],
+  "build": "passed",
+  "verification_command": "./scripts/verify.sh",
+  "tests": {
+    "local": {
+      "totals": {
+        "tests": 181,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 18,
+        "passed": 163
+      },
+      "suites": [
+        {
+          "name": "br.com.myfinancehub.AppAppearanceTest",
+          "tests": 4,
+          "failures": 0,
+          "errors": 0,
+          "skipped": 0
+        },
+        {
+          "name": "br.com.myfinancehub.B3ActivityTest",
+          "tests": 11,
+          "failures": 0,
+          "errors": 0,
+          "skipped": 0
+        },
+        {
+          "name": "br.com.myfinancehub.B3PositionImporterTest",
+          "tests": 19,
+          "failures": 0,
+          "errors": 0,
+          "skipped": 0
+        },
+        {
+          "name": "br.com.myfinancehub.B3StoreTest",
+          "tests": 15,
+          "failures": 0,
+          "errors": 0,
+          "skipped": 0
+        },
+        {
+          "name": "br.com.myfinancehub.FinanceStoreTest",
+          "tests": 23,
+          "failures": 0,
+          "errors": 0,
+          "skipped": 0
+        },
+        {
+          "name": "br.com.myfinancehub.LocalBuildTest",
+          "tests": 3,
+          "failures": 0,
+          "errors": 0,
+          "skipped": 0
+        },
+        {
+          "name": "br.com.myfinancehub.MainActivityTest",
+          "tests": 18,
+          "failures": 0,
+          "errors": 0,
+          "skipped": 0
+        },
+        {
+          "name": "br.com.myfinancehub.MoneyTest",
+          "tests": 4,
+          "failures": 0,
+          "errors": 0,
+          "skipped": 0
+        },
+        {
+          "name": "br.com.myfinancehub.NotificationCaptureServiceTest",
+          "tests": 7,
+          "failures": 0,
+          "errors": 0,
+          "skipped": 7
+        },
+        {
+          "name": "br.com.myfinancehub.NotificationFlowTest",
+          "tests": 11,
+          "failures": 0,
+          "errors": 0,
+          "skipped": 11
+        },
+        {
+          "name": "br.com.myfinancehub.NotificationInboxTest",
+          "tests": 12,
+          "failures": 0,
+          "errors": 0,
+          "skipped": 0
+        },
+        {
+          "name": "br.com.myfinancehub.NotificationParserTest",
+          "tests": 18,
+          "failures": 0,
+          "errors": 0,
+          "skipped": 0
+        },
+        {
+          "name": "br.com.myfinancehub.StatementImporterTest",
+          "tests": 36,
+          "failures": 0,
+          "errors": 0,
+          "skipped": 0
+        }
+      ],
+      "apk": "artifacts/MyFinanceHub-0.4.0-local-debug.apk",
+      "bytes": 242748,
+      "sha256": "4d372e88ed2a77ba79cec60ac0d9d33b188a1c1e92413e37d50245cd8b25a54d",
+      "lint": "No issues found."
+    },
+    "notifications": {
+      "totals": {
+        "tests": 181,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 3,
+        "passed": 178
+      },
+      "suites": [
+        {
+          "name": "br.com.myfinancehub.AppAppearanceTest",
+          "tests": 4,
+          "failures": 0,
+          "errors": 0,
+          "skipped": 0
+        },
+        {
+          "name": "br.com.myfinancehub.B3ActivityTest",
+          "tests": 11,
+          "failures": 0,
+          "errors": 0,
+          "skipped": 0
+        },
+        {
+          "name": "br.com.myfinancehub.B3PositionImporterTest",
+          "tests": 19,
+          "failures": 0,
+          "errors": 0,
+          "skipped": 0
+        },
+        {
+          "name": "br.com.myfinancehub.B3StoreTest",
+          "tests": 15,
+          "failures": 0,
+          "errors": 0,
+          "skipped": 0
+        },
+        {
+          "name": "br.com.myfinancehub.FinanceStoreTest",
+          "tests": 23,
+          "failures": 0,
+          "errors": 0,
+          "skipped": 0
+        },
+        {
+          "name": "br.com.myfinancehub.LocalBuildTest",
+          "tests": 3,
+          "failures": 0,
+          "errors": 0,
+          "skipped": 3
+        },
+        {
+          "name": "br.com.myfinancehub.MainActivityTest",
+          "tests": 18,
+          "failures": 0,
+          "errors": 0,
+          "skipped": 0
+        },
+        {
+          "name": "br.com.myfinancehub.MoneyTest",
+          "tests": 4,
+          "failures": 0,
+          "errors": 0,
+          "skipped": 0
+        },
+        {
+          "name": "br.com.myfinancehub.NotificationCaptureServiceTest",
+          "tests": 7,
+          "failures": 0,
+          "errors": 0,
+          "skipped": 0
+        },
+        {
+          "name": "br.com.myfinancehub.NotificationFlowTest",
+          "tests": 11,
+          "failures": 0,
+          "errors": 0,
+          "skipped": 0
+        },
+        {
+          "name": "br.com.myfinancehub.NotificationInboxTest",
+          "tests": 12,
+          "failures": 0,
+          "errors": 0,
+          "skipped": 0
+        },
+        {
+          "name": "br.com.myfinancehub.NotificationParserTest",
+          "tests": 18,
+          "failures": 0,
+          "errors": 0,
+          "skipped": 0
+        },
+        {
+          "name": "br.com.myfinancehub.StatementImporterTest",
+          "tests": 36,
+          "failures": 0,
+          "errors": 0,
+          "skipped": 0
+        }
+      ],
+      "apk": "artifacts/MyFinanceHub-0.4.0-notifications-debug.apk",
+      "bytes": 252074,
+      "sha256": "d3e20d078a6222254036790d1d4c521fd10ef5084bb191f28739b852cf1d1465",
+      "lint": "No issues found."
+    }
+  },
+  "certificate_sha256": "3aed65b8149ccd92287cc1055b57a5ae6b909f12d9282ffab221c24a8dadb446",
+  "signature_v2_valid": true,
+  "zipalign_valid": true,
+  "b3": {
+    "update_method": "local XLSX/CSV position report with review",
+    "automatic_sync": false,
+    "direct_api_called": false,
+    "real_b3_export_validated": false,
+    "reported_values_separate_from_manual_investments_and_cash": true,
+    "unknown_values_preserved": true,
+    "no_inferred_acquisition_cost_or_return": true,
+    "maximum_file_bytes": 8388608,
+    "maximum_positions": 5000
+  },
+  "emulator": {
+    "android_api": 35,
+    "upgrade_from": "0.3.0",
+    "install_replace_succeeded": true,
+    "all_legacy_rows_and_ids_preserved": true,
+    "schema_after_upgrade": 2,
+    "native_ui_import": "passed using synthetic XLSX through Android document picker",
+    "physical_phone_validation": false,
+    "imported_positions": 3,
+    "reported_total_cents": 133446,
+    "unvalued_positions": 1,
+    "checked_screens": [
+      "dark empty B3",
+      "dark XLSX preview",
+      "dark imported B3 summary",
+      "dark positions list",
+      "dark position details",
+      "dark privacy masks"
+    ],
+    "light_visual_check": false,
+    "font_scale_1_3_visual_check": false,
+    "initial_system_ui_anr": "Cold boot software-emulator System UI ANR recovered before B3 flow; no app crash observed.",
+    "final_distributed_apk_reinstalled_and_opened": true,
+    "final_data_preservation_checked": true,
+    "final_distributed_apk_sha256_matches_installed": true,
+    "final_distributed_apk_reimported_synthetic_xlsx": true
+  },
+  "date": "2026-10-16",
+  "screenshots": [
+    "artifacts/screenshots/0.4.0/b3-detalhes-escuro.png",
+    "artifacts/screenshots/0.4.0/b3-importada-escuro.png",
+    "artifacts/screenshots/0.4.0/b3-lista-escuro.png",
+    "artifacts/screenshots/0.4.0/b3-previa-escuro.png",
+    "artifacts/screenshots/0.4.0/b3-privacidade-escuro.png",
+    "artifacts/screenshots/0.4.0/b3-vazia-escuro.png"
+  ]
+}

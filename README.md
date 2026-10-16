@@ -6,11 +6,11 @@ O repositório também contém um [backend preparatório de Open Finance](backen
 
 ## Instalar no celular
 
-O APK de testes padrão está em [`artifacts/MyFinanceHub-0.3.0-local-debug.apk`](artifacts/MyFinanceHub-0.3.0-local-debug.apk), quando gerado. Requer **Android 8.0 ou superior**. A versão 0.3.0 reorganiza as telas e oferece aparência clara, escura ou conforme o sistema. O Painel reúne saldo e investimentos; os lançamentos, a importação, os totais mensais e os gastos por categoria ficam em **Lançamentos**.
+O APK de testes padrão está em [`artifacts/MyFinanceHub-0.4.0-local-debug.apk`](artifacts/MyFinanceHub-0.4.0-local-debug.apk), quando gerado. Requer **Android 8.0 ou superior**. A versão 0.4.0 acrescenta a importação de posições da Área do Investidor B3 em Excel (XLSX) ou CSV, com revisão antes de salvar. Mantém a aparência clara, escura ou conforme o sistema. O Painel reúne saldo e investimentos; os lançamentos, a importação, os totais mensais e os gastos por categoria ficam em **Lançamentos**.
 
-Também há o [`artifacts/MyFinanceHub-0.3.0-notifications-debug.apk`](artifacts/MyFinanceHub-0.3.0-notifications-debug.apk), com o módulo experimental de notificações. **Escolha um dos APKs:** ambos usam o mesmo pacote e a mesma assinatura, atualizam o mesmo aplicativo e não são instalados lado a lado. A edição `local` não declara o serviço de leitura de notificações nem mostra os controles de captura.
+Também há o [`artifacts/MyFinanceHub-0.4.0-notifications-debug.apk`](artifacts/MyFinanceHub-0.4.0-notifications-debug.apk), com o módulo experimental de notificações. **Escolha um dos APKs:** ambos usam o mesmo pacote e a mesma assinatura, atualizam o mesmo aplicativo e não são instalados lado a lado. A edição `local` não declara o serviço de leitura de notificações nem mostra os controles de captura.
 
-Para atualizar as versões anteriores enviadas aqui, exporte um backup na versão atual, se ela abrir, e instale por cima, **sem desinstalar**. O pacote `br.com.myfinancehub`, a assinatura de desenvolvimento, o banco financeiro e o formato do backup foram preservados; o código da versão passa para 5. Confira os dados existentes após a atualização.
+Para atualizar as versões anteriores enviadas aqui, exporte um backup na versão atual, se ela abrir, e instale por cima, **sem desinstalar**. O pacote `br.com.myfinancehub` e a assinatura de desenvolvimento foram mantidos. Uma migração aditiva para banco v2 preserva os dados existentes. O backup novo é v2 e o app também restaura backups v1; o código da versão passa para 6. Confira os dados existentes após a atualização.
 
 1. Transfira o APK para o celular e abra o arquivo.
 2. Autorize a instalação por esse aplicativo de arquivos, se o Android solicitar.
@@ -19,7 +19,7 @@ Para atualizar as versões anteriores enviadas aqui, exporte um backup na versã
 
 Este APK é assinado com uma chave de desenvolvimento. Não é uma publicação na Play Store. Para atualizar sem desinstalar, preserve a mesma chave e o identificador `br.com.myfinancehub`. **Desinstalar apaga os dados locais.** Se houver conflito de assinatura, preserve a instalação atual e registre a mensagem para diagnóstico. Para distribuição definitiva, configure uma chave de release própria fora do Git.
 
-No Samsung S22 Ultra, o usuário relatou bloqueio do Play Protect na 0.2.0 e informou que ela instalou após pausar a proteção. A orientação é **manter o Play Protect ativado**. A instalação e a aceitação da 0.3.0 nesse aparelho ainda precisam ser verificadas; a edição local não garante aceitação. Se houver bloqueio, preserve a instalação atual e registre a mensagem, sem desativar proteções para contorná-lo.
+No Samsung S22 Ultra, o usuário relatou bloqueio do Play Protect na 0.2.0 e informou que ela instalou após pausar a proteção. A orientação é **manter o Play Protect ativado**. A instalação e a aceitação da 0.4.0 nesse aparelho ainda precisam ser verificadas; a edição local não garante aceitação. Se houver bloqueio, preserve a instalação atual e registre a mensagem, sem desativar proteções para contorná-lo.
 
 ## Funcionalidades
 
@@ -28,6 +28,7 @@ No Samsung S22 Ultra, o usuário relatou bloqueio do Play Protect na 0.2.0 e inf
 - Categorias personalizadas de entrada, saída ou ambas. Excluir uma categoria preserva os lançamentos.
 - Cartões por nome e últimos quatro dígitos, fechamento e vencimento cadastrados, e movimentações mensais por cartão.
 - Investimentos manuais, com nome, ticker opcional, tipo, valor aplicado e valor atual.
+- Posição B3 separada: importação local XLSX/CSV com data de referência, revisão, ativos, instituições, quantidades e valores informados; busca e reimportação sem acumular cópias.
 - Painel com saldo das contas e resumo dos investimentos: aplicado, valor atual e variação.
 - Lançamentos com resumo mensal de entradas e saídas, despesas por categoria, busca e filtros.
 - Aparência clara, escura ou conforme o sistema; formulários, diálogos, seletores e calendário acompanham o tema.
@@ -54,6 +55,14 @@ Os totais dos cartões mostram o **mês civil escolhido em Lançamentos**, não 
 As posições de investimentos são independentes das contas. Aportes e resgates precisam também dos respectivos lançamentos na conta. Não há cotação automática, cálculo tributário ou recomendação de investimento.
 
 Para transferir entre contas próprias, registre uma saída na origem e uma entrada no destino, ambas com a forma **Transferência entre minhas contas**. O saldo total permanece correto; esses registros ficam fora dos totais de receitas e despesas em Lançamentos. Nenhum pagamento ou transferência real é feito pelo app.
+
+## Importar posições B3
+
+Baixe **Excel → Posição** na [Área do Investidor](https://www.investidor.b3.com.br/) pelo navegador, volte ao app e use **Carteira → Abrir posição B3 → Importar posição B3**. Revise o arquivo e a data. Nenhuma senha é recebida pelo app. O importador aceita XLSX ou CSV com tabelas compatíveis, até 8 MiB e 5.000 posições; não aceita PDF, XLS, movimentações, fórmulas ou vínculos externos. Arquivos reais ainda precisam ser conferidos: um layout não reconhecido gera erro sem alterar a posição anterior.
+
+A B3 restringe a API direta ao acesso empresarial autorizado. Esta versão atualiza por arquivo, com valores de referência do relatório, separados dos investimentos manuais. Sem avaliação, a posição aparece como não informada. Veja [formatos, limites e tratamento financeiro](docs/B3.md) e [a validação da 0.4.0](docs/VALIDACAO-0.4.0.md).
+
+**Antes de atualizar, salve um backup.** O banco v2 preserva os dados da 0.3.0 e inclui o relatório B3 nos backups novos. Não volte à 0.3.0 usando o banco atualizado; a versão antiga não suporta banco/backup v2.
 
 ## Importar extratos
 
@@ -85,7 +94,7 @@ PDF, fotos e formatos proprietários não são suportados. O CSV serve para plan
 
 ## Notificações — módulo experimental separado
 
-O flavor `local` é a distribuição padrão: `BuildConfig.NOTIFICATION_CAPTURE_ENABLED` fica desativado, o manifesto não declara o serviço de captura nem suas consultas a apps e a interface não mostra os controles de notificações. **O APK 0.3.0 local não oferece este fluxo.**
+O flavor `local` é a distribuição padrão: `BuildConfig.NOTIFICATION_CAPTURE_ENABLED` fica desativado, o manifesto não declara o serviço de captura nem suas consultas a apps e a interface não mostra os controles de notificações. **O APK 0.4.0 local não oferece este fluxo.**
 
 O código do módulo permanece no flavor `notifications`, com a flag ativada, para desenvolvimento e validação separados. Nesse flavor experimental, o fluxo em **Ajustes → Notificações de transações** é:
 
@@ -142,10 +151,10 @@ Para validar o módulo experimental separadamente:
 `verify.sh` executa testes e lint dos dois flavors e monta ambos os APKs. APK local gerado: `app/build/outputs/apk/local/debug/app-local-debug.apk`. O experimental fica em `app/build/outputs/apk/notifications/debug/app-notifications-debug.apk`. Relatórios: `app/build/reports/`. Para atualizar as cópias distribuíveis:
 
 ```sh
-cp app/build/outputs/apk/local/debug/app-local-debug.apk artifacts/MyFinanceHub-0.3.0-local-debug.apk
-sha256sum artifacts/MyFinanceHub-0.3.0-local-debug.apk > artifacts/MyFinanceHub-0.3.0-local-debug.apk.sha256
-cp app/build/outputs/apk/notifications/debug/app-notifications-debug.apk artifacts/MyFinanceHub-0.3.0-notifications-debug.apk
-sha256sum artifacts/MyFinanceHub-0.3.0-notifications-debug.apk > artifacts/MyFinanceHub-0.3.0-notifications-debug.apk.sha256
+cp app/build/outputs/apk/local/debug/app-local-debug.apk artifacts/MyFinanceHub-0.4.0-local-debug.apk
+sha256sum artifacts/MyFinanceHub-0.4.0-local-debug.apk > artifacts/MyFinanceHub-0.4.0-local-debug.apk.sha256
+cp app/build/outputs/apk/notifications/debug/app-notifications-debug.apk artifacts/MyFinanceHub-0.4.0-notifications-debug.apk
+sha256sum artifacts/MyFinanceHub-0.4.0-notifications-debug.apk > artifacts/MyFinanceHub-0.4.0-notifications-debug.apk.sha256
 ```
 
 No Android Studio, abra o projeto e configure JDK compatível e SDK 35. `local.properties`, chaves e saídas de build são ignorados. O APK local e seus testes não exigem backend, chaves de API ou credenciais bancárias.
@@ -165,4 +174,6 @@ Siga o [roteiro de testes no celular](docs/TESTES-NO-CELULAR.md) para verificar 
 
 A preparação do backend de Open Finance está em [`backend/`](backend/); a integração com o Android e a sincronização agendada ainda serão desenvolvidas após configurar e validar uma conexão real. O [guia](docs/OPEN-FINANCE.md) recomenda o Meu Pluggy para uso pessoal e explica o cadastro.
 
-Integração autorizada com a B3, pagamentos Pix e conexões diretas com Samsung Wallet e Google Wallet são módulos futuros. Dependem de APIs oficiais, consentimento e, quando aplicável, provedores/contratos autorizados. O APK local usa lançamentos manuais e importação de extratos; não se conecta à conta bancária ou à carteira e não faz pagamentos.
+A importação de posições B3 já está disponível em **Carteira → Abrir posição B3** e **Painel → Posição B3**. Consulte [o guia B3](docs/B3.md). A posição fica separada do total manual e do saldo, não presume custo de aquisição e não calcula rentabilidade. Substituir o relatório exige confirmação e não cria lançamentos.
+
+A sincronização automática pela API B3, pagamentos Pix e conexões diretas com Samsung Wallet e Google Wallet são módulos futuros. Dependem de APIs oficiais, consentimento e, quando aplicável, provedores/contratos autorizados. O APK local usa lançamentos manuais e importação de extratos; não se conecta à conta bancária ou à carteira e não faz pagamentos.

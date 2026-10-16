@@ -36,7 +36,7 @@ public final class MainActivity extends Activity {
     private int BG, GREEN, LIME, TEXT, MUTED, LINE, RED, WHITE;
     private boolean darkTheme;
     private static final int PAGE_SIZE=30;
-    private static final int IMPORT=41, BACKUP=42, RESTORE=43, CSV=44;
+    private static final int IMPORT=41, BACKUP=42, RESTORE=43, CSV=44, B3_IMPORT=45;
     private static final boolean NOTIFICATIONS_ENABLED=BuildConfig.NOTIFICATION_CAPTURE_ENABLED;
     private static final String[] METHOD_KEYS={"other","pix","debit","credit","cash","transfer","card_payment"};
     private static final String[] METHOD_NAMES={"Outro / extrato","PIX (registro manual)","Débito","Crédito","Dinheiro","Transferência entre minhas contas","Pagamento de fatura"};
@@ -45,7 +45,7 @@ public final class MainActivity extends Activity {
     private LinearLayout root, content, navigation;
     private ScrollView screenScroll;
     private int renderedPage=-1;
-    private final int[] pageScroll=new int[6];
+    private final int[] pageScroll=new int[7];
     private boolean firstResume=true;
     private YearMonth month=YearMonth.now();
     private int page=0, filter=0;
@@ -53,6 +53,8 @@ public final class MainActivity extends Activity {
     private String search="";
     private String categorySearch="";
     private int visibleEntries=PAGE_SIZE;
+    private String b3Search="";
+    private int visibleB3Positions=PAGE_SIZE;
     private List<Models.Category> categoryCache=Collections.emptyList();
     private List<Models.Account> accountCache=Collections.emptyList();
     private List<Models.Card> cardCache=Collections.emptyList();
@@ -72,7 +74,7 @@ public final class MainActivity extends Activity {
         if(state!=null){ page=state.getInt("page"); filter=state.getInt("filter");
             month=YearMonth.parse(state.getString("month",month.toString())); search=state.getString("search","");categorySearch=state.getString("categorySearch","");
             int[] savedScroll=state.getIntArray("page_scroll");if(savedScroll!=null)System.arraycopy(savedScroll,0,pageScroll,0,Math.min(savedScroll.length,pageScroll.length));
-            visibleEntries=state.getInt("visible_entries",PAGE_SIZE);}
+            visibleEntries=state.getInt("visible_entries",PAGE_SIZE);b3Search=state.getString("b3_search","");visibleB3Positions=state.getInt("b3_visible",PAGE_SIZE);}
         render();
     }
     @Override protected void onSaveInstanceState(Bundle state){
@@ -80,6 +82,7 @@ public final class MainActivity extends Activity {
         state.putString("month",month.toString()); state.putString("search",search);
         state.putString("categorySearch",categorySearch);
         rememberScroll();state.putIntArray("page_scroll",pageScroll);state.putInt("visible_entries",visibleEntries);
+        state.putString("b3_search",b3Search);state.putInt("b3_visible",visibleB3Positions);
     }
     @Override protected void onResume(){super.onResume();if(AppAppearance.isDark(this)!=darkTheme){recreate();return;}if(firstResume){firstResume=false;return;}if(store!=null&&notificationInbox!=null)render();}
     @Override protected void onDestroy(){if(activeProgress!=null)activeProgress.dismiss();worker.execute(()->{store.close();notificationInbox.close();});worker.shutdown();super.onDestroy();}
@@ -103,10 +106,10 @@ public final class MainActivity extends Activity {
         ScrollView scroll=new ScrollView(this);scroll.setFillViewport(true);screenScroll=scroll;renderedPage=page;
         content=column();content.setPadding(dp(22),dp(8),dp(22),dp(28));scroll.addView(content);
         root.addView(scroll,new LinearLayout.LayoutParams(-1,0,1));
-        if(page==0)dashboard();else if(page==1)transactions();else if(page==2)wallet();else if(page==4)categories();else if(page==5)notifications();else settings();
+        if(page==0)dashboard();else if(page==1)transactions();else if(page==2)wallet();else if(page==4)categories();else if(page==5)notifications();else if(page==6)b3Screen();else settings();
         navigation=row();navigation.setBackgroundColor(WHITE);navigation.setPadding(dp(6),dp(6),dp(6),dp(6));
         String[] labels={"Painel","Lançamentos","Carteira","Categorias","Ajustes"};int[] targets={0,1,2,4,3};
-        for(int i=0;i<labels.length;i++){final int p=targets[i];boolean selected=p==page||page==5&&p==3;LinearLayout item=column();item.setGravity(Gravity.CENTER);item.setPadding(0,dp(8),0,dp(6));
+        for(int i=0;i<labels.length;i++){final int p=targets[i];boolean selected=p==page||page==5&&p==3||page==6&&p==2;LinearLayout item=column();item.setGravity(Gravity.CENTER);item.setPadding(0,dp(8),0,dp(6));
             item.setBackground(feedback(selected?colors.surfaceAlt:WHITE,16));item.setSelected(selected);
             item.addView(new NavIcon(this,p,selected?GREEN:MUTED),new LinearLayout.LayoutParams(dp(25),dp(25)));
             TextView label=text(labels[i],11,selected?GREEN:MUTED,selected);label.setGravity(Gravity.CENTER);label.setMaxLines(1);label.setHorizontallyScrolling(false);label.setEllipsize(android.text.TextUtils.TruncateAt.END);label.setAutoSizeTextTypeUniformWithConfiguration(9,11,1,android.util.TypedValue.COMPLEX_UNIT_SP);item.addView(label);
@@ -132,7 +135,7 @@ public final class MainActivity extends Activity {
         balance.addView(text("Disponível nas contas, sem somar os investimentos.",12,colors.heroMuted,false));
         add(balance,0,0,0,4);
 
-        section("Investimentos","Posições atualizadas por você");
+        section("Investimentos","Posições cadastradas manualmente");
         List<Models.Investment> positions=store.investments();long invested=0,current=0;
         for(Models.Investment investment:positions){invested=Math.addExact(invested,investment.investedCents);current=Math.addExact(current,investment.currentCents);}
         long variation=Math.subtractExact(current,invested);
@@ -156,6 +159,7 @@ public final class MainActivity extends Activity {
         add(investments,0,0,0,14);
         Button wallet=button("Ver carteira",GREEN,colors.onPrimary);wallet.setOnClickListener(v->{page=2;render();});content.addView(wallet);
         add(text("Valores de investimentos são informados manualmente. Não há atualização automática de cotações.",12,MUTED,false),0,12,0,0);
+        b3Summary(false);
         if(NOTIFICATIONS_ENABLED){int pending=notificationInbox.pendingCount();
             if(pending>0){section("Para revisar","Sugestões de novos lançamentos");action("Revisar notificações ("+pending+")","Confira os dados antes de salvar.",()->{page=5;render();});}}
     }
@@ -218,15 +222,80 @@ public final class MainActivity extends Activity {
             addTo(card,text("Fecha dia "+c.closingDay+" · vence dia "+c.dueDay+" · editar",12,colors.heroMuted,false),0,8,0,0);card.setOnClickListener(v->editCard(c));add(card,0,0,0,12);}
         Button credit=button("+ Adicionar cartão",WHITE,GREEN);credit.setOnClickListener(v->editCard(null));add(credit,0,10,0,0);
         TextView creditNote=text("Crédito não reduz o saldo da conta. Registre o pagamento como saída com a forma “Pagamento de fatura”: ela reduz o saldo sem repetir as despesas do painel. Os valores acima são movimentos do mês civil, não uma fatura calculada.",12,MUTED,false);add(creditNote,0,10,0,0);
-        section("Investimentos","Posições atualizadas por você");long invested=0,current=0;
+        section("Investimentos","Posições cadastradas manualmente");long invested=0,current=0;
         for(Models.Investment i:store.investments()){invested=Math.addExact(invested,i.investedCents);current=Math.addExact(current,i.currentCents);}
         LinearLayout summary=box(colors.surfaceAlt);summary.addView(text("VALOR ATUAL",11,GREEN,true));addTo(summary,text(money(current),27,GREEN,true),0,8,0,6);summary.addView(text("Aplicado: "+money(invested)+"  ·  Variação: "+money(current-invested),12,GREEN,false));content.addView(summary);
         for(Models.Investment i:store.investments()){LinearLayout card=box(WHITE);card.addView(text(i.name+(i.ticker.isEmpty()?"":" · "+i.ticker),15,TEXT,true));
             addTo(card,text(i.kind+"  ·  Atual: "+money(i.currentCents),12,MUTED,false),0,7,0,0);card.setOnClickListener(v->editInvestment(i));add(card,0,10,0,0);}
         Button invest=button("+ Adicionar investimento",GREEN,colors.onPrimary);invest.setOnClickListener(v->editInvestment(null));add(invest,0,14,0,0);
-        add(text("Cadastro de posições independente do saldo das contas. Aportes e resgates devem ser registrados também nos lançamentos. Sincronização com a B3 prevista para uma etapa futura.",12,MUTED,false),0,10,0,0);
+        add(text("Cadastro manual independente do saldo das contas. Aportes e resgates devem ser registrados também nos lançamentos.",12,MUTED,false),0,10,0,0);
+        b3Summary(true);
     }
 
+    private void openB3(){page=6;render();}
+    private String b3Date(String value){return LocalDate.parse(value).format(DateTimeFormatter.ofPattern("dd/MM/yyyy"));}
+    private String b3Quantity(String value){return hidden?"••••":value.replace('.',',');}
+    private String b3Total(B3Portfolio.Snapshot snapshot){return snapshot.unvaluedCount()==snapshot.positions.size()?"Não informado":money(snapshot.totalCents());}
+    private String b3Count(int count){return count+(count==1?" posição":" posições");}
+    private void b3Summary(boolean inWallet){
+        B3Portfolio.Snapshot snapshot=store.b3Snapshot();
+        section("Posição B3",snapshot==null?"Relatório da Área do Investidor":"Posição em "+b3Date(snapshot.asOfDate));
+        if(snapshot!=null){LinearLayout card=box(colors.surfaceAlt);
+            card.addView(text(snapshot.unvaluedCount()>0?"VALOR INFORMADO · PARCIAL":"VALOR INFORMADO NO RELATÓRIO",11,GREEN,true));
+            addTo(card,text(b3Total(snapshot),26,GREEN,true),0,8,0,6);
+            card.addView(text(b3Count(snapshot.positions.size())+(snapshot.positions.size()==1?" importada":" importadas")+(snapshot.unvaluedCount()>0?" · "+snapshot.unvaluedCount()+" sem valor informado":""),12,MUTED,false));
+            add(card,0,0,0,10);}
+        action(inWallet?"Abrir posição B3":"Posição B3",snapshot==null?"Importe o Excel da B3 e revise seus investimentos.":"Consultar ativos ou importar um relatório mais recente.",this::openB3);
+        add(text("A posição B3 fica separada dos investimentos manuais e do saldo das contas, evitando contar o mesmo ativo duas vezes.",12,MUTED,false),0,0,0,0);
+    }
+    private void b3Screen(){
+        eyebrow("ÁREA DO INVESTIDOR");title("Posição B3");
+        add(text("Seus ativos a partir do relatório que você baixar na B3.",14,MUTED,false),0,7,0,18);
+        Button imp=button("Importar posição B3",GREEN,colors.onPrimary);imp.setOnClickListener(v->chooseDocument(B3_IMPORT));content.addView(imp);
+        Button help=button("Como baixar na B3",colors.surfaceAlt,GREEN);help.setOnClickListener(v->b3Guide());add(help,0,10,0,14);
+        B3Portfolio.Snapshot snapshot=store.b3Snapshot();
+        if(snapshot==null){LinearLayout empty=box(WHITE);empty(empty,"Nenhum relatório importado","Baixe sua posição em Excel na Área do Investidor. Escolha o arquivo aqui e confira os dados antes de salvar.");content.addView(empty);}
+        else{
+            LinearLayout summary=box(WHITE);summary.addView(text("POSIÇÃO EM "+b3Date(snapshot.asOfDate),12,GREEN,true));
+            addTo(summary,text(b3Total(snapshot),30,TEXT,true),0,10,0,6);
+            summary.addView(text(snapshot.unvaluedCount()>0?"Soma parcial: "+b3Count(snapshot.unvaluedCount())+" sem valor informado.":"Soma dos valores informados no relatório.",12,MUTED,false));
+            addTo(summary,text(b3Count(snapshot.positions.size())+" · custo de aquisição e rentabilidade não informados.",12,MUTED,false),0,10,0,0);add(summary,0,0,0,16);
+            EditText searchField=input("Buscar ativo ou instituição",b3Search,InputType.TYPE_CLASS_TEXT);content.addView(searchField);
+            LinearLayout list=column();add(list,0,12,0,0);fillB3Positions(list,snapshot,b3Search);
+            searchField.addTextChangedListener(new android.text.TextWatcher(){public void beforeTextChanged(CharSequence s,int a,int c,int f){}public void onTextChanged(CharSequence s,int st,int before,int count){b3Search=s.toString();visibleB3Positions=PAGE_SIZE;fillB3Positions(list,snapshot,b3Search);}public void afterTextChanged(android.text.Editable e){}});
+            Button remove=button("Remover relatório B3",WHITE,RED);remove.setOnClickListener(v->new AlertDialog.Builder(this).setTitle("Remover posição B3?")
+                .setMessage("Remove somente o relatório B3 importado. Seus investimentos manuais, contas e lançamentos serão preservados.").setNegativeButton("Cancelar",null)
+                .setPositiveButton("Remover",(d,w)->background(()->{store.clearB3Snapshot();return "Relatório B3 removido.";},result->{render();message(result);})).show());add(remove,0,18,0,0);
+        }
+        add(text("Atualização por arquivo, sem conexão automática. Valores são referências da data do relatório e podem diferir dos valores de resgate. A posição importada não altera seus lançamentos ou investimentos manuais.",12,MUTED,false),0,18,0,0);
+    }
+    private void fillB3Positions(LinearLayout list,B3Portfolio.Snapshot snapshot,String query){
+        list.removeAllViews();int count=0;
+        for(B3Portfolio.Position position:snapshot.positions){
+            if(!normalize(position.product+" "+position.ticker+" "+position.institution+" "+position.kind).contains(normalize(query)))continue;
+            if(count++>=visibleB3Positions)continue;
+            LinearLayout card=box(WHITE);card.addView(text(position.product+(position.ticker.isEmpty()?"":" · "+position.ticker),15,TEXT,true));
+            if(!position.institution.isEmpty()||!position.kind.isEmpty())addTo(card,text(position.institution+(position.institution.isEmpty()||position.kind.isEmpty()?"":" · ")+position.kind,12,MUTED,false),0,6,0,0);
+            addTo(card,text("Quantidade: "+b3Quantity(position.quantity),13,MUTED,false),0,12,0,4);
+            card.addView(text(position.currentCents==null?"Valor não informado":money(position.currentCents),19,position.currentCents==null?MUTED:GREEN,true));
+            card.setContentDescription("Detalhes de "+position.product);card.setBackground(feedback(WHITE,20));card.setOnClickListener(v->b3PositionDetails(position,snapshot.asOfDate));addTo(list,card,0,0,0,10);
+        }
+        if(count==0){LinearLayout empty=box(WHITE);empty(empty,"Nenhuma posição encontrada","Tente outro ativo ou nome da instituição.");list.addView(empty);}
+        if(count>visibleB3Positions){Button more=button("Mostrar mais ("+visibleB3Positions+" de "+count+")",WHITE,GREEN);more.setOnClickListener(v->{visibleB3Positions+=PAGE_SIZE;fillB3Positions(list,snapshot,query);});list.addView(more);}
+    }
+    private void b3PositionDetails(B3Portfolio.Position position,String asOfDate){
+        LinearLayout form=form();form.addView(text(position.product,18,TEXT,true));
+        String[] labels={"Código", "ISIN", "Tipo", "Instituição", "Conta", "Quantidade", "Valor informado", "Data da posição"};
+        String account=position.account.isEmpty()?"Não informada":"Final "+position.account.substring(Math.max(0,position.account.length()-4));
+        String[] values={position.ticker,position.isin,position.kind,position.institution,account,b3Quantity(position.quantity),position.currentCents==null?"Não informado":money(position.currentCents),b3Date(asOfDate)};
+        for(int i=0;i<labels.length;i++){addTo(form,text(labels[i],12,MUTED,true),0,15,0,4);form.addView(text(values[i].isEmpty()?"Não informado":values[i],15,TEXT,false));}
+        addTo(form,text("Custo de aquisição não informado. Esta posição não calcula lucro ou rentabilidade. Para atualizar, importe outro relatório da B3.",12,MUTED,false),0,20,0,0);
+        new AlertDialog.Builder(this).setTitle("Detalhes da posição").setView(wrap(form)).setPositiveButton("Fechar",null).show();
+    }
+    private void b3Guide(){
+        new AlertDialog.Builder(this).setTitle("Baixar posição na B3").setMessage("1. Abra o site oficial e entre com sua conta da B3 no navegador.\n\n2. Acesse Carteira → Investimentos → Posição e escolha Baixar → Excel. Os nomes podem mudar no portal.\n\n3. Volte ao MyFinanceHub, toque em Importar posição B3 e selecione o arquivo .xlsx. Confira a data de referência do relatório.\n\nTambém aceitamos CSV com colunas de posição compatíveis. PDF, extrato de movimentações e arquivos .xls não são aceitos. Nunca informe sua senha ao MyFinanceHub. A atualização automática da B3 ainda não está disponível.")
+            .setNegativeButton("Fechar",null).setPositiveButton("Abrir site oficial",(d,w)->{try{startActivity(new Intent(Intent.ACTION_VIEW,Uri.parse("https://www.investidor.b3.com.br/")));}catch(android.content.ActivityNotFoundException ex){message("Abra https://www.investidor.b3.com.br/ no seu navegador.");}}).show();
+    }
     private void settings(){
         eyebrow("DO SEU JEITO");title("Organize sua rotina");
         section("Aparência","Escolha como prefere visualizar o app");
@@ -237,12 +306,13 @@ public final class MainActivity extends Activity {
         else notificationFuture();
         section("Seus dados","Arquivos sob seu controle");
         action("Importar extrato CSV ou OFX","Escolha uma conta, revise e confirme os registros.",()->chooseDocument(IMPORT));
+        action("Posição B3","Importar e consultar o relatório da Área do Investidor.",this::openB3);
         action("Exportar lançamentos em CSV","Para consultar em uma planilha.",()->createDocument(CSV,"text/csv","myfinancehub-lancamentos-"+LocalDate.now()+".csv"));
         action("Salvar backup completo","JSON sem criptografia. Guarde em local seguro.",()->createDocument(BACKUP,"application/json","myfinancehub-backup-"+LocalDate.now()+".json"));
         action("Restaurar backup","Substitui os dados locais após confirmação.",()->new AlertDialog.Builder(this).setTitle("Restaurar um backup?").setMessage("O arquivo válido substituirá todos os dados atuais. Antes, salve um backup do estado atual. Use apenas um arquivo JSON exportado pelo MyFinanceHub.").setNegativeButton("Cancelar",null).setPositiveButton("Escolher arquivo",(d,w)->chooseDocument(RESTORE)).show());
         section("Próximas etapas","Módulos ainda não disponíveis");LinearLayout future=box(colors.surfaceAlt);
         future.addView(text("1  Open Finance, PIX e carteiras",14,GREEN,true));addTo(future,text("Conexões diretas com bancos e carteiras dependem das APIs e das permissões de cada serviço."+(NOTIFICATIONS_ENABLED?" A leitura opcional de notificações funciona localmente.":" Nesta versão, use os registros manuais e a importação de extratos."),12,GREEN,false),0,7,0,16);
-        future.addView(text("2  Sincronização com a B3",14,GREEN,true));addTo(future,text("Exige acesso autorizado à integração. Nesta versão, os investimentos são cadastrados manualmente.",12,GREEN,false),0,7,0,0);content.addView(future);
+        future.addView(text("2  Atualização automática da B3",14,GREEN,true));addTo(future,text("A API direta exige acesso empresarial autorizado. A importação de relatórios já está disponível em Carteira → Abrir posição B3.",12,GREEN,false),0,7,0,0);content.addView(future);
         add(text("MyFinanceHub · versão "+appVersion()+"\nDados no armazenamento privado do app. Sem anúncios, rastreamento ou acesso à internet. Desinstalar o aplicativo apaga os dados locais; exporte um backup antes.",12,MUTED,false),0,22,0,0);
     }
     private String appearanceLabel(AppAppearance.Mode mode){return mode==AppAppearance.Mode.LIGHT?"Claro":mode==AppAppearance.Mode.DARK?"Escuro":"Seguir o sistema";}
@@ -414,17 +484,46 @@ public final class MainActivity extends Activity {
         dialog(old==null?"Novo investimento":"Editar investimento",form,()->{Models.Investment i=new Models.Investment();i.id=old==null?0:old.id;i.name=name.getText().toString().trim();i.ticker=ticker.getText().toString().trim();i.kind=kind.getText().toString().trim();i.investedCents=Money.parseCents(invested.getText().toString());i.currentCents=Money.parseCents(current.getText().toString());store.saveInvestment(i);},old==null?null:()->confirmDelete("Excluir este investimento?",()->store.deleteInvestment(old.id)));}
 
     private void chooseDocument(int code){Intent intent=new Intent(Intent.ACTION_OPEN_DOCUMENT);intent.addCategory(Intent.CATEGORY_OPENABLE);intent.setType("*/*");
+        if(code==B3_IMPORT)intent.putExtra(Intent.EXTRA_MIME_TYPES,new String[]{"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet","text/csv","text/comma-separated-values","application/octet-stream"});
         try{startActivityForResult(intent,code);}catch(android.content.ActivityNotFoundException ex){message("Nenhum seletor de arquivos disponível neste dispositivo.");}}
     private void createDocument(int code,String mime,String name){Intent intent=new Intent(Intent.ACTION_CREATE_DOCUMENT);intent.addCategory(Intent.CATEGORY_OPENABLE);intent.setType(mime);intent.putExtra(Intent.EXTRA_TITLE,name);
         try{startActivityForResult(intent,code);}catch(android.content.ActivityNotFoundException ex){message("Nenhum seletor de arquivos disponível neste dispositivo.");}}
     @Override protected void onActivityResult(int request,int result,Intent data){super.onActivityResult(request,result,data);if(result!=RESULT_OK||data==null||data.getData()==null)return;Uri uri=data.getData();
         if(request==IMPORT||request==RESTORE){background(()->readDocument(uri),text->{if(request==IMPORT)importOptions(text,fileName(uri));else restorePreview(text);});}
+        else if(request==B3_IMPORT){background(()->{byte[] bytes=readDocumentBytes(uri);B3PositionImporter.Report report=B3PositionImporter.parse(bytes,fileName(uri));return new B3ImportResult(report,sha256(bytes));},value->b3Preview(value.report,value.hash));}
         else if(request==BACKUP||request==CSV){background(()->{String text=request==BACKUP?store.exportBackup():store.exportCsv();try(OutputStream out=getContentResolver().openOutputStream(uri,"wt")){if(out==null)throw new IOException("Não foi possível abrir o destino.");out.write(text.getBytes(StandardCharsets.UTF_8));}return "Arquivo salvo. Guarde-o em local seguro.";},this::message);}}
     private String fileName(Uri uri){try(Cursor c=getContentResolver().query(uri,new String[]{OpenableColumns.DISPLAY_NAME},null,null,null)){if(c!=null&&c.moveToFirst())return c.getString(0);}catch(Exception ignored){}return "extrato";}
-    private String readDocument(Uri uri)throws IOException{try(InputStream in=getContentResolver().openInputStream(uri);ByteArrayOutputStream out=new ByteArrayOutputStream()){
+    private byte[] readDocumentBytes(Uri uri)throws IOException{try(InputStream in=getContentResolver().openInputStream(uri);ByteArrayOutputStream out=new ByteArrayOutputStream()){
         if(in==null)throw new IOException("Não foi possível ler o arquivo.");byte[] buffer=new byte[8192];int read;
-        while((read=in.read(buffer))!=-1){if(out.size()+read>8*1024*1024)throw new IOException("O limite por arquivo é de 8 MB.");out.write(buffer,0,read);}byte[] bytes=out.toByteArray();
-        try{return StandardCharsets.UTF_8.newDecoder().onMalformedInput(CodingErrorAction.REPORT).decode(ByteBuffer.wrap(bytes)).toString();}catch(CharacterCodingException ex){return Charset.forName("windows-1252").decode(ByteBuffer.wrap(bytes)).toString();}}}
+        while((read=in.read(buffer))!=-1){if(out.size()+read>8*1024*1024)throw new IOException("O limite por arquivo é de 8 MB.");out.write(buffer,0,read);}return out.toByteArray();}}
+    private String readDocument(Uri uri)throws IOException{byte[] bytes=readDocumentBytes(uri);
+        try{return StandardCharsets.UTF_8.newDecoder().onMalformedInput(CodingErrorAction.REPORT).decode(ByteBuffer.wrap(bytes)).toString();}catch(CharacterCodingException ex){return Charset.forName("windows-1252").decode(ByteBuffer.wrap(bytes)).toString();}}
+    private static final class B3ImportResult{final B3PositionImporter.Report report;final String hash;B3ImportResult(B3PositionImporter.Report report,String hash){this.report=report;this.hash=hash;}}
+    private static String sha256(byte[] bytes)throws java.security.NoSuchAlgorithmException{StringBuilder result=new StringBuilder();for(byte value:java.security.MessageDigest.getInstance("SHA-256").digest(bytes))result.append(String.format(Locale.ROOT,"%02x",value&255));return result.toString();}
+    private void b3Preview(B3PositionImporter.Report report,String sourceHash){
+        if(report.positions.isEmpty()){message("O relatório não contém posições para importar.");return;}
+        LinearLayout form=form();long total=0;int missing=0;for(B3Portfolio.Position position:report.positions)if(position.currentCents==null)missing++;else total=Math.addExact(total,position.currentCents);
+        form.addView(text(b3Count(report.positions.size())+(report.positions.size()==1?" encontrada":" encontradas"),17,TEXT,true));addTo(form,text(missing==report.positions.size()?"Valor atual não informado":"Valor informado"+(missing>0?" (parcial)":"")+": "+money(total),15,GREEN,true),0,9,0,4);
+        if(missing>0)form.addView(text(b3Count(missing)+" sem valor informado. "+(missing==1?"Não será tratada":"Não serão tratadas")+" como valor zero.",12,MUTED,false));
+        EditText date=field(form,"Data da posição (dd/MM/aaaa)",report.asOfDate.isEmpty()?"":b3Date(report.asOfDate),InputType.TYPE_CLASS_DATETIME|InputType.TYPE_DATETIME_VARIATION_DATE);
+        date.setKeyListener(null);date.setFocusable(false);date.setHint("Toque para escolher a data");
+        if(report.asOfDate.isEmpty()){date.setOnClickListener(v->{LocalDate initial=LocalDate.now();try{initial=LocalDate.parse(date.getText().toString(),DateTimeFormatter.ofPattern("dd/MM/uuuu").withResolverStyle(java.time.format.ResolverStyle.STRICT));}catch(java.time.DateTimeException ignored){}
+            DatePickerDialog picker=new DatePickerDialog(this,(view,year,monthOfYear,day)->date.setText(LocalDate.of(year,monthOfYear+1,day).format(DateTimeFormatter.ofPattern("dd/MM/yyyy"))),initial.getYear(),initial.getMonthValue()-1,initial.getDayOfMonth());picker.getDatePicker().setMaxDate(System.currentTimeMillis());picker.show();});}
+        else date.setEnabled(false);
+        addTo(form,text(report.asOfDate.isEmpty()?"Escolha a data de referência indicada no relatório. A data do download não é necessariamente a data da posição.":"Data de referência identificada no conteúdo do relatório.",12,MUTED,false),0,7,0,14);
+        form.addView(text("Esta importação substitui somente o relatório B3 anterior, sem alterar seus investimentos manuais, saldo ou lançamentos. Um arquivo parcial continua sendo uma posição parcial; confira se selecionou todo o relatório desejado.",12,MUTED,false));
+        addTo(form,text("Custo de aquisição e rentabilidade não são calculados com os valores de posição.",12,MUTED,false),0,10,0,12);
+        for(int index=0;index<Math.min(10,report.positions.size());index++){B3Portfolio.Position position=report.positions.get(index);divider(form);addTo(form,text(position.product+(position.ticker.isEmpty()?"":" · "+position.ticker),14,TEXT,true),0,10,0,4);form.addView(text("Qtd. "+b3Quantity(position.quantity)+" · "+(position.currentCents==null?"Valor não informado":money(position.currentCents)),12,MUTED,false));}
+        if(report.positions.size()>10)addTo(form,text("Amostra das primeiras 10 posições. A lista completa estará disponível após confirmar.",12,MUTED,false),0,10,0,0);
+        AlertDialog preview=new AlertDialog.Builder(this).setTitle("Revisar posição B3").setView(wrap(form)).setNegativeButton("Cancelar",null).setPositiveButton("Confirmar importação",null).create();
+        preview.setOnShowListener(dialog->preview.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener(view->{
+            LocalDate asOf;try{asOf=LocalDate.parse(date.getText().toString(),DateTimeFormatter.ofPattern("dd/MM/uuuu").withResolverStyle(java.time.format.ResolverStyle.STRICT));}catch(java.time.DateTimeException error){message("Escolha uma data da posição válida antes de confirmar.");return;}
+            if(asOf.isAfter(LocalDate.now())){message("A data da posição não pode estar no futuro.");return;}
+            Runnable save=()->{preview.dismiss();background(()->{store.replaceB3Snapshot(report.positions,asOf.toString(),sourceHash);return "Posição B3 importada. Seus registros manuais foram preservados.";},result->{b3Search="";visibleB3Positions=PAGE_SIZE;pageScroll[6]=0;page=6;render();message(result);});};
+            B3Portfolio.Snapshot previous=store.b3Snapshot();
+            if(previous!=null&&asOf.toString().compareTo(previous.asOfDate)<0)new AlertDialog.Builder(this).setTitle("Substituir por posição anterior?").setMessage("O relatório salvo é de "+b3Date(previous.asOfDate)+". O selecionado é mais antigo e substituirá essa posição B3.").setNegativeButton("Cancelar",null).setPositiveButton("Substituir",(d,w)->save.run()).show();else save.run();
+        }));preview.show();
+    }
     private interface Job<T>{T run()throws Exception;} private interface Result<T>{void accept(T result);}
     private <T> void background(Job<T> job,Result<T> done){AlertDialog progress=new AlertDialog.Builder(this).setMessage("Processando arquivo…").setCancelable(false).create();activeProgress=progress;progress.show();worker.execute(()->{try{T value=job.run();runOnUiThread(()->{if(!isFinishing()&&!isDestroyed()){progress.dismiss();activeProgress=null;try{done.accept(value);}catch(Exception ex){message(safeError(ex));}}});}catch(Exception ex){runOnUiThread(()->{if(!isFinishing()&&!isDestroyed()){progress.dismiss();activeProgress=null;message(safeError(ex));}});}});}
 
@@ -454,7 +553,7 @@ public final class MainActivity extends Activity {
         if(entries.size()>12)addTo(form,text("Amostra: 12 de "+entries.size()+" registros.",12,MUTED,false),0,12,0,0);
         new AlertDialog.Builder(this).setTitle("Revisar importação").setView(wrap(form)).setNegativeButton("Cancelar",null).setPositiveButton("Importar "+entries.size(),(d,w)->background(()->store.importEntries(entries),count->{month=importMonth;filter=0;search="";visibleEntries=PAGE_SIZE;if(renderedPage==1&&screenScroll!=null)screenScroll.scrollTo(0,0);pageScroll[1]=0;page=1;render();message(count+" lançamentos importados. "+(entries.size()-count)+" duplicatas ignoradas.");})).show();
     }
-    private void restorePreview(String source){new AlertDialog.Builder(this).setTitle("Substituir todos os dados?").setMessage("Esta operação substitui contas, categorias, cartões, lançamentos e investimentos. Um arquivo inválido não altera os dados atuais. Confirme somente se guardou uma cópia dos dados atuais.").setNegativeButton("Cancelar",null).setPositiveButton("Restaurar",(d,w)->background(()->{store.restoreBackup(source);return "Backup restaurado.";},result->{render();message(result);})).show();}
+    private void restorePreview(String source){new AlertDialog.Builder(this).setTitle("Substituir todos os dados?").setMessage("Esta operação substitui contas, categorias, cartões, lançamentos, investimentos e a posição B3. Um backup antigo sem posição B3 remove o relatório atual. Um arquivo inválido não altera os dados atuais. Confirme somente se guardou uma cópia dos dados atuais.").setNegativeButton("Cancelar",null).setPositiveButton("Restaurar",(d,w)->background(()->{store.restoreBackup(source);return "Backup restaurado.";},result->{render();message(result);})).show();}
 
     private void dialog(String title,LinearLayout form,Runnable save,Runnable delete){AlertDialog.Builder builder=new AlertDialog.Builder(this).setTitle(title).setView(wrap(form)).setNegativeButton("Cancelar",null).setPositiveButton("Salvar",null);if(delete!=null)builder.setNeutralButton("Excluir",(d,w)->delete.run());AlertDialog d=builder.create();
         d.setOnShowListener(x->d.getButton(-1).setOnClickListener(v->{try{save.run();d.dismiss();render();}catch(Exception ex){message(safeError(ex));}}));d.show();}

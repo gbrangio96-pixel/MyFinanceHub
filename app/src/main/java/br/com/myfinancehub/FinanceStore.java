@@ -17,6 +17,7 @@ import java.math.BigInteger;
 import java.nio.charset.StandardCharsets;
 import java.text.ParseException;
 import java.text.SimpleDateFormat;
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -39,7 +40,7 @@ import br.com.myfinancehub.Models.Investment;
  */
 public final class FinanceStore implements AutoCloseable {
     private final Helper helper;
-    private static final int BACKUP_VERSION = 1;
+    private static final int BACKUP_VERSION = 2;
     private static final int MAX_BACKUP_BYTES = 8 * 1024 * 1024;
     private static final BigInteger MAX_CENTS = BigInteger.valueOf(Long.MAX_VALUE);
     private static final BigInteger MIN_CENTS = BigInteger.valueOf(Long.MIN_VALUE);
@@ -211,6 +212,53 @@ public final class FinanceStore implements AutoCloseable {
 
     public synchronized void deleteInvestment(long id) { delete("investments", id); }
 
+    /** Last imported B3 custody report. Its values are separate from all manual investments. */
+    public synchronized B3Portfolio.Snapshot b3Snapshot() {
+        SQLiteDatabase db = db();
+        db.beginTransaction();
+        try (Cursor metadata = db.query("b3_snapshots", null, "_id=1", null, null, null, null)) {
+            if (!metadata.moveToFirst()) {
+                db.setTransactionSuccessful();
+                return null;
+            }
+            List<B3Portfolio.Position> positions = new ArrayList<>();
+            try (Cursor c = db.query("b3_positions", null, "snapshot_id=1", null, null, null, "_id")) {
+                while (c.moveToNext()) {
+                    int valuation = c.getColumnIndexOrThrow("current_cents");
+                    positions.add(new B3Portfolio.Position(string(c, "product"), string(c, "institution"),
+                            string(c, "account"), string(c, "ticker"), string(c, "isin"), string(c, "kind"),
+                            string(c, "quantity"), c.isNull(valuation) ? null : c.getLong(valuation)));
+                }
+            }
+            B3Portfolio.Snapshot snapshot = new B3Portfolio.Snapshot(string(metadata, "as_of_date"), string(metadata, "imported_at"),
+                    string(metadata, "source_hash"), positions);
+            db.setTransactionSuccessful();
+            return snapshot;
+        } finally { db.endTransaction(); }
+    }
+
+    /** Replaces only the B3 report, atomically. Reimporting never appends positions or edits cost. */
+    public synchronized void replaceB3Snapshot(List<B3Portfolio.Position> positions, String asOfDate, String sourceHash) {
+        B3Portfolio.Snapshot snapshot = new B3Portfolio.Snapshot(asOfDate, Instant.now().toString(), sourceHash, positions);
+        B3Portfolio.requireNotFutureDate(snapshot.asOfDate);
+        SQLiteDatabase db = db();
+        db.beginTransaction();
+        try {
+            writeB3Snapshot(db, snapshot);
+            db.setTransactionSuccessful();
+        } finally { db.endTransaction(); }
+    }
+
+    /** Removes the imported report without changing manually entered investments or cash. */
+    public synchronized void clearB3Snapshot() {
+        SQLiteDatabase db = db();
+        db.beginTransaction();
+        try {
+            writeB3Snapshot(db, null);
+            db.setTransactionSuccessful();
+        } finally { db.endTransaction(); }
+    }
+
     /**
      * All-or-nothing statement import. Existing nonempty sourceKey values are skipped within
      * their own account. The same source key may be used by another account. Entries without
@@ -260,7 +308,8 @@ public final class FinanceStore implements AutoCloseable {
             for (Investment i : investments()) investments.put(new JSONObject().put("id", i.id).put("name", i.name)
                     .put("ticker", i.ticker).put("kind", i.kind).put("investedCents", i.investedCents).put("currentCents", i.currentCents));
             String backup = root.put("categories", categories).put("accounts", accounts).put("cards", cards)
-                    .put("entries", entries).put("investments", investments).toString(2);
+                    .put("entries", entries).put("investments", investments)
+                    .put("b3", b3Json(b3Snapshot())).toString(2);
             if (backup.getBytes(StandardCharsets.UTF_8).length > MAX_BACKUP_BYTES)
                 throw invalid("O backup excede o limite de 8 MB. Exporte os lançamentos em CSV.");
             db.setTransactionSuccessful();
@@ -280,13 +329,15 @@ public final class FinanceStore implements AutoCloseable {
         List<Category> categories = new ArrayList<>(); List<Account> accounts = new ArrayList<>();
         List<Card> cards = new ArrayList<>(); List<Entry> entries = new ArrayList<>();
         List<Investment> investments = new ArrayList<>();
+        B3Portfolio.Snapshot b3 = null;
         try {
             JSONTokener tokener = new JSONTokener(json);
             Object parsed = tokener.nextValue();
             if (!(parsed instanceof JSONObject) || tokener.nextClean() != 0)
                 throw invalid("Backup JSON inválido.");
             JSONObject root = (JSONObject) parsed;
-            if (!"MyFinanceHub".equals(jsonString(root, "format")) || jsonLong(root, "version") != BACKUP_VERSION)
+            long backupVersion = jsonLong(root, "version");
+            if (!"MyFinanceHub".equals(jsonString(root, "format")) || (backupVersion != 1 && backupVersion != BACKUP_VERSION))
                 throw invalid("Formato ou versão do backup não suportado.");
             JSONArray rows = root.getJSONArray("categories");
             for (int n = 0; n < rows.length(); n++) {
@@ -323,6 +374,13 @@ public final class FinanceStore implements AutoCloseable {
                         jsonString(r, "kind"), jsonLong(r, "investedCents"), jsonLong(r, "currentCents"));
                 investmentValues(i); investments.add(i);
             }
+            if (backupVersion == 2) {
+                Object report = root.get("b3");
+                if (report != JSONObject.NULL) {
+                    if (!(report instanceof JSONObject)) throw invalid("Relatório B3 inválido no backup.");
+                    b3 = parseB3Json((JSONObject) report);
+                }
+            }
         } catch (JSONException | NullPointerException error) { throw invalid("Backup JSON inválido ou incompleto."); }
 
         Map<Long, Category> categoryIds = new HashMap<>(); Set<Long> accountIds = new HashSet<>(), cardIds = new HashSet<>();
@@ -353,6 +411,7 @@ public final class FinanceStore implements AutoCloseable {
             for (Card c : cards) insertRestored("cards", c.id, cardValues(c));
             for (Entry e : entries) insertRestored("entries", e.id, entryValues(e));
             for (Investment i : investments) insertRestored("investments", i.id, investmentValues(i));
+            writeB3Snapshot(db, b3);
             validateFinancialRanges();
             db.setTransactionSuccessful();
         } catch (SQLiteConstraintException error) { throw invalid("Backup com registros duplicados ou vínculos inválidos."); }
@@ -490,6 +549,55 @@ public final class FinanceStore implements AutoCloseable {
     private void insertRestored(String table, long id, ContentValues values) {
         values.put("_id", id); db().insertOrThrow(table, null, values);
     }
+
+    private static void writeB3Snapshot(SQLiteDatabase db, B3Portfolio.Snapshot snapshot) {
+        db.delete("b3_positions", null, null);
+        db.delete("b3_snapshots", null, null);
+        if (snapshot == null) return;
+        ContentValues metadata = new ContentValues();
+        metadata.put("_id", 1); metadata.put("as_of_date", snapshot.asOfDate);
+        metadata.put("imported_at", snapshot.importedAt); metadata.put("source_hash", snapshot.sourceHash);
+        db.insertOrThrow("b3_snapshots", null, metadata);
+        long ordinal = 1;
+        for (B3Portfolio.Position p : snapshot.positions) {
+            ContentValues row = new ContentValues();
+            row.put("_id", ordinal++); row.put("snapshot_id", 1); row.put("identity_key", p.identityKey());
+            row.put("product", p.product); row.put("institution", p.institution); row.put("account", p.account);
+            row.put("ticker", p.ticker); row.put("isin", p.isin); row.put("kind", p.kind); row.put("quantity", p.quantity);
+            if (p.currentCents == null) row.putNull("current_cents"); else row.put("current_cents", p.currentCents);
+            db.insertOrThrow("b3_positions", null, row);
+        }
+    }
+
+    private static Object b3Json(B3Portfolio.Snapshot snapshot) throws JSONException {
+        if (snapshot == null) return JSONObject.NULL;
+        JSONArray positions = new JSONArray();
+        for (B3Portfolio.Position p : snapshot.positions) {
+            positions.put(new JSONObject().put("product", p.product).put("institution", p.institution)
+                    .put("account", p.account).put("ticker", p.ticker).put("isin", p.isin).put("kind", p.kind)
+                    .put("quantity", p.quantity).put("currentCents", p.currentCents == null ? JSONObject.NULL : p.currentCents));
+        }
+        return new JSONObject().put("asOfDate", snapshot.asOfDate).put("importedAt", snapshot.importedAt)
+                .put("sourceHash", snapshot.sourceHash).put("positions", positions);
+    }
+
+    private static B3Portfolio.Snapshot parseB3Json(JSONObject report) throws JSONException {
+        JSONArray rows = report.getJSONArray("positions");
+        if (rows.length() > B3Portfolio.MAX_POSITIONS) throw invalid("O relatório B3 deve ter no máximo 5.000 posições.");
+        List<B3Portfolio.Position> positions = new ArrayList<>(rows.length());
+        for (int n = 0; n < rows.length(); n++) {
+            JSONObject row = rows.getJSONObject(n);
+            Object value = row.get("currentCents");
+            Long currentCents = value == JSONObject.NULL ? null : jsonLong(row, "currentCents");
+            positions.add(new B3Portfolio.Position(jsonString(row, "product"), jsonString(row, "institution"),
+                    jsonString(row, "account"), jsonString(row, "ticker"), jsonString(row, "isin"),
+                    jsonString(row, "kind"), jsonString(row, "quantity"), currentCents));
+        }
+        B3Portfolio.Snapshot snapshot = new B3Portfolio.Snapshot(jsonString(report, "asOfDate"), jsonString(report, "importedAt"),
+                jsonString(report, "sourceHash"), positions);
+        B3Portfolio.requireNotFutureDate(snapshot.asOfDate);
+        return snapshot;
+    }
     private void validateUniqueName(String table, String name, long id) {
         String normalized = name.toLowerCase(Locale.ROOT);
         try (Cursor c = db().query(table, new String[]{"_id", "name"}, null, null, null, null, null)) {
@@ -604,7 +712,7 @@ public final class FinanceStore implements AutoCloseable {
     private static IllegalArgumentException invalid(String message) { return new IllegalArgumentException(message); }
 
     private static final class Helper extends SQLiteOpenHelper {
-        Helper(Context context) { super(context, "myfinancehub.db", null, 1); }
+        Helper(Context context) { super(context, "myfinancehub.db", null, 2); }
         @Override public void onConfigure(SQLiteDatabase db) { db.setForeignKeyConstraintsEnabled(true); }
         @Override public void onCreate(SQLiteDatabase db) {
             db.execSQL("CREATE TABLE categories (_id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL COLLATE NOCASE UNIQUE, type TEXT NOT NULL CHECK(type IN ('income','expense','both')))");
@@ -615,6 +723,7 @@ public final class FinanceStore implements AutoCloseable {
             db.execSQL("CREATE INDEX entries_category ON entries(category_id)");
             db.execSQL("CREATE INDEX entries_card ON entries(card_id)");
             db.execSQL("CREATE TABLE investments (_id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL, ticker TEXT NOT NULL, kind TEXT NOT NULL, invested_cents INTEGER NOT NULL CHECK(invested_cents>=0), current_cents INTEGER NOT NULL CHECK(current_cents>=0))");
+            createB3Tables(db);
             ContentValues account = new ContentValues(); account.put("name", "Principal"); account.put("opening_cents", 0);
             db.insertOrThrow("accounts", null, account);
             String[] expenses = {"Alimentação", "Moradia", "Transporte", "Saúde", "Educação", "Lazer", "Compras", "Serviços", "Impostos", "Outras despesas"};
@@ -628,7 +737,15 @@ public final class FinanceStore implements AutoCloseable {
             db.insertOrThrow("categories", null, values);
         }
         @Override public void onUpgrade(SQLiteDatabase db, int oldVersion, int newVersion) {
-            throw new IllegalStateException("Migração de banco ainda não disponível.");
+            if (oldVersion == 1 && newVersion == 2) {
+                createB3Tables(db);
+                return;
+            }
+            throw new IllegalStateException("Migração de banco não suportada.");
+        }
+        private static void createB3Tables(SQLiteDatabase db) {
+            db.execSQL("CREATE TABLE b3_snapshots (_id INTEGER PRIMARY KEY CHECK(_id=1), as_of_date TEXT NOT NULL, imported_at TEXT NOT NULL, source_hash TEXT NOT NULL)");
+            db.execSQL("CREATE TABLE b3_positions (_id INTEGER PRIMARY KEY, snapshot_id INTEGER NOT NULL REFERENCES b3_snapshots(_id) ON DELETE CASCADE, identity_key TEXT NOT NULL UNIQUE, product TEXT NOT NULL, institution TEXT NOT NULL, account TEXT NOT NULL, ticker TEXT NOT NULL, isin TEXT NOT NULL, kind TEXT NOT NULL, quantity TEXT NOT NULL, current_cents INTEGER CHECK(current_cents IS NULL OR current_cents>=0))");
         }
     }
 }

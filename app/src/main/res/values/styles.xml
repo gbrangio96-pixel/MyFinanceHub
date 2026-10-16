@@ -1,0 +1,98 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <style name="Base.AppTheme.Light" parent="android:style/Theme.Material.Light.NoActionBar">
+        <item name="android:fontFamily">sans</item>
+        <item name="android:colorAccent">#255847</item>
+        <item name="android:colorControlNormal">#52665A</item>
+        <item name="android:colorControlActivated">#255847</item>
+        <item name="android:colorControlHighlight">#26255847</item>
+        <item name="android:colorButtonNormal">#ECF1E8</item>
+        <item name="android:colorBackground">#F6F7F2</item>
+        <item name="android:colorBackgroundFloating">#FFFFFF</item>
+        <item name="android:colorForeground">#1C3029</item>
+        <item name="android:textColorPrimary">#1C3029</item>
+        <item name="android:textColorSecondary">#52665A</item>
+        <item name="android:textColorHint">#52665A</item>
+        <item name="android:textColorLink">#255847</item>
+        <item name="android:textColorHighlight">#663C8969</item>
+        <item name="android:windowLightStatusBar">true</item>
+        <item name="android:statusBarColor">#F6F7F2</item>
+        <item name="android:navigationBarColor">#163A32</item>
+        <item name="android:windowActionModeOverlay">true</item>
+        <item name="android:windowBackground">#F6F7F2</item>
+        <item name="android:alertDialogTheme">@style/AppDialog.Light</item>
+        <item name="android:datePickerDialogTheme">@style/AppDialog.Light</item>
+        <item name="android:spinnerStyle">@style/AppSpinner.Light</item>
+    </style>
+
+    <style name="Base.AppTheme.Dark" parent="android:style/Theme.Material.NoActionBar">
+        <item name="android:fontFamily">sans</item>
+        <item name="android:colorAccent">#A8D5B8</item>
+        <item name="android:colorControlNormal">#B1C3B7</item>
+        <item name="android:colorControlActivated">#A8D5B8</item>
+        <item name="android:colorControlHighlight">#33A8D5B8</item>
+        <item name="android:colorButtonNormal">#23392F</item>
+        <item name="android:colorBackground">#101C18</item>
+        <item name="android:colorBackgroundFloating">#192A23</item>
+        <item name="android:colorForeground">#F0F5EF</item>
+        <item name="android:textColorPrimary">#F0F5EF</item>
+        <item name="android:textColorSecondary">#B1C3B7</item>
+        <item name="android:textColorHint">#B1C3B7</item>
+        <item name="android:textColorLink">#A8D5B8</item>
+        <item name="android:textColorHighlight">#665B9B75</item>
+        <item name="android:windowLightStatusBar">false</item>
+        <item name="android:statusBarColor">#101C18</item>
+        <item name="android:navigationBarColor">#101C18</item>
+        <item name="android:windowActionModeOverlay">true</item>
+        <item name="android:windowBackground">#101C18</item>
+        <item name="android:alertDialogTheme">@style/AppDialog.Dark</item>
+        <item name="android:datePickerDialogTheme">@style/AppDialog.Dark</item>
+        <item name="android:spinnerStyle">@style/AppSpinner.Dark</item>
+    </style>
+
+    <style name="AppTheme.Light" parent="Base.AppTheme.Light" />
+    <style name="AppTheme.Dark" parent="Base.AppTheme.Dark" />
+    <!-- Launch follows the system; the activity applies a saved manual choice. -->
+    <style name="AppTheme" parent="AppTheme.Light" />
+
+    <style name="AppDialog.Light" parent="android:style/Theme.Material.Light.Dialog.Alert">
+        <item name="android:fontFamily">sans</item>
+        <item name="android:colorAccent">#255847</item>
+        <item name="android:colorControlNormal">#52665A</item>
+        <item name="android:colorControlActivated">#255847</item>
+        <item name="android:colorControlHighlight">#26255847</item>
+        <item name="android:colorBackground">#FFFFFF</item>
+        <item name="android:colorBackgroundFloating">#FFFFFF</item>
+        <item name="android:colorForeground">#1C3029</item>
+        <item name="android:textColorPrimary">#1C3029</item>
+        <item name="android:textColorSecondary">#52665A</item>
+        <item name="android:textColorHint">#52665A</item>
+        <item name="android:textColorLink">#255847</item>
+        <item name="android:textColorHighlight">#663C8969</item>
+        <item name="android:spinnerStyle">@style/AppSpinner.Light</item>
+    </style>
+
+    <style name="AppDialog.Dark" parent="android:style/Theme.Material.Dialog.Alert">
+        <item name="android:fontFamily">sans</item>
+        <item name="android:colorAccent">#A8D5B8</item>
+        <item name="android:colorControlNormal">#B1C3B7</item>
+        <item name="android:colorControlActivated">#A8D5B8</item>
+        <item name="android:colorControlHighlight">#33A8D5B8</item>
+        <item name="android:colorBackground">#192A23</item>
+        <item name="android:colorBackgroundFloating">#192A23</item>
+        <item name="android:colorForeground">#F0F5EF</item>
+        <item name="android:textColorPrimary">#F0F5EF</item>
+        <item name="android:textColorSecondary">#B1C3B7</item>
+        <item name="android:textColorHint">#B1C3B7</item>
+        <item name="android:textColorLink">#A8D5B8</item>
+        <item name="android:textColorHighlight">#665B9B75</item>
+        <item name="android:spinnerStyle">@style/AppSpinner.Dark</item>
+    </style>
+
+    <style name="AppSpinner.Light" parent="android:style/Widget.Material.Light.Spinner">
+        <item name="android:popupBackground">#FFFFFF</item>
+    </style>
+    <style name="AppSpinner.Dark" parent="android:style/Widget.Material.Spinner">
+        <item name="android:popupBackground">#192A23</item>
+    </style>
+</resources>

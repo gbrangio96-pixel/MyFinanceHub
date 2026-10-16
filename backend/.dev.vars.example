@@ -1,0 +1,5 @@
+# Preencha somente na sua maquina ou nas Secrets do servidor; nunca no Git/APK/chat.
+PLUGGY_CLIENT_ID=""
+PLUGGY_CLIENT_SECRET=""
+PLUGGY_ITEM_IDS=""
+APP_ACCESS_TOKEN=""

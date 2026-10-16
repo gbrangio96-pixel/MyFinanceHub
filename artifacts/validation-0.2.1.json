@@ -1,0 +1,180 @@
+{
+  "version": "0.2.1",
+  "version_code": 4,
+  "flavor": "local",
+  "package": "br.com.myfinancehub",
+  "minimum_android": "8.0 (API 26)",
+  "target_api": 35,
+  "build": "passed",
+  "verification_command": "./scripts/verify.sh",
+  "tests": {
+    "local": {
+      "totals": {
+        "tests": 127,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 18,
+        "passed": 109
+      },
+      "suites": [
+        {
+          "name": "br.com.myfinancehub.FinanceStoreTest",
+          "tests": 23,
+          "failures": 0,
+          "errors": 0,
+          "skipped": 0
+        },
+        {
+          "name": "br.com.myfinancehub.LocalBuildTest",
+          "tests": 3,
+          "failures": 0,
+          "errors": 0,
+          "skipped": 0
+        },
+        {
+          "name": "br.com.myfinancehub.MainActivityTest",
+          "tests": 13,
+          "failures": 0,
+          "errors": 0,
+          "skipped": 0
+        },
+        {
+          "name": "br.com.myfinancehub.MoneyTest",
+          "tests": 4,
+          "failures": 0,
+          "errors": 0,
+          "skipped": 0
+        },
+        {
+          "name": "br.com.myfinancehub.NotificationCaptureServiceTest",
+          "tests": 7,
+          "failures": 0,
+          "errors": 0,
+          "skipped": 7
+        },
+        {
+          "name": "br.com.myfinancehub.NotificationFlowTest",
+          "tests": 11,
+          "failures": 0,
+          "errors": 0,
+          "skipped": 11
+        },
+        {
+          "name": "br.com.myfinancehub.NotificationInboxTest",
+          "tests": 12,
+          "failures": 0,
+          "errors": 0,
+          "skipped": 0
+        },
+        {
+          "name": "br.com.myfinancehub.NotificationParserTest",
+          "tests": 18,
+          "failures": 0,
+          "errors": 0,
+          "skipped": 0
+        },
+        {
+          "name": "br.com.myfinancehub.StatementImporterTest",
+          "tests": 36,
+          "failures": 0,
+          "errors": 0,
+          "skipped": 0
+        }
+      ],
+      "lint": "No issues found."
+    },
+    "notifications": {
+      "totals": {
+        "tests": 127,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 3,
+        "passed": 124
+      },
+      "suites": [
+        {
+          "name": "br.com.myfinancehub.FinanceStoreTest",
+          "tests": 23,
+          "failures": 0,
+          "errors": 0,
+          "skipped": 0
+        },
+        {
+          "name": "br.com.myfinancehub.LocalBuildTest",
+          "tests": 3,
+          "failures": 0,
+          "errors": 0,
+          "skipped": 3
+        },
+        {
+          "name": "br.com.myfinancehub.MainActivityTest",
+          "tests": 13,
+          "failures": 0,
+          "errors": 0,
+          "skipped": 0
+        },
+        {
+          "name": "br.com.myfinancehub.MoneyTest",
+          "tests": 4,
+          "failures": 0,
+          "errors": 0,
+          "skipped": 0
+        },
+        {
+          "name": "br.com.myfinancehub.NotificationCaptureServiceTest",
+          "tests": 7,
+          "failures": 0,
+          "errors": 0,
+          "skipped": 0
+        },
+        {
+          "name": "br.com.myfinancehub.NotificationFlowTest",
+          "tests": 11,
+          "failures": 0,
+          "errors": 0,
+          "skipped": 0
+        },
+        {
+          "name": "br.com.myfinancehub.NotificationInboxTest",
+          "tests": 12,
+          "failures": 0,
+          "errors": 0,
+          "skipped": 0
+        },
+        {
+          "name": "br.com.myfinancehub.NotificationParserTest",
+          "tests": 18,
+          "failures": 0,
+          "errors": 0,
+          "skipped": 0
+        },
+        {
+          "name": "br.com.myfinancehub.StatementImporterTest",
+          "tests": 36,
+          "failures": 0,
+          "errors": 0,
+          "skipped": 0
+        }
+      ],
+      "lint": "No issues found."
+    }
+  },
+  "apk_bytes": 176494,
+  "apk_sha256": "8be53c02f0decd7a6d559d3bbbcd9fb6783281dfea30a051a9491ec6936a4794",
+  "certificate_sha256": "3aed65b8149ccd92287cc1055b57a5ae6b909f12d9282ffab221c24a8dadb446",
+  "signature_matches_0_1_0_0_1_1_0_2_0": true,
+  "apk_signature_v2_valid": true,
+  "zipalign_valid": true,
+  "manifest": {
+    "requested_permissions": [],
+    "registered_services": [],
+    "package_queries": []
+  },
+  "notification_capture_enabled": false,
+  "financial_schema": 1,
+  "financial_backup_version": 1,
+  "financial_source_identical_to_0_2_0": true,
+  "upgrade_checks": "Same package/signing certificate, higher version code, unchanged financial schema, synthetic preservation tests. Physical upgrade to 0.2.1 not tested.",
+  "physical_device": "User reported 0.2.0 installed after pausing Play Protect. Play Protect reactivation recommended. 0.2.1 local installation/acceptance has not been tested on the S22 Ultra.",
+  "notification_module": "Retained as separate experimental notifications flavor; no capture or review controls in the local APK."
+}

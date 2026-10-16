@@ -1,0 +1,44 @@
+{
+  "version": "0.1.1",
+  "version_code": 2,
+  "package": "br.com.myfinancehub",
+  "build": "passed",
+  "lint": "No issues found.",
+  "suites": [
+    {
+      "name": "br.com.myfinancehub.FinanceStoreTest",
+      "tests": 14,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    },
+    {
+      "name": "br.com.myfinancehub.MainActivityTest",
+      "tests": 10,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    },
+    {
+      "name": "br.com.myfinancehub.MoneyTest",
+      "tests": 4,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    },
+    {
+      "name": "br.com.myfinancehub.StatementImporterTest",
+      "tests": 36,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    }
+  ],
+  "total_tests": 64,
+  "apk_sha256": "4b612bd289b2f6090c8bbea54afe245dfa295da81f85c6ff76ea306e4e2a8471",
+  "signature_matches_0_1_0": true,
+  "csv_reference": "samples/extrato-exemplo-virgula.csv — 4 registros, valores e direções verificados",
+  "reported_rows": "Both supplied rows parsed successfully before and after correction; exact original file error not reproduced.",
+  "correction": "Only empty trailing cells tolerated; populated extra cells still rejected with counts/delimiter/line.",
+  "physical_device": "Updated APK not tested on physical device."
+}

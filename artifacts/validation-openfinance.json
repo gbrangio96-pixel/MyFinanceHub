@@ -1,0 +1,32 @@
+{
+  "date": "2026-10-16",
+  "stage": "personal_open_finance_backend_preparation",
+  "provider": "Meu Pluggy",
+  "node_version": "24.19.0",
+  "backend_tests": {
+    "command": "cd backend && npm test",
+    "runner_reported_tests_including_pagination_group": 54,
+    "passed": 54,
+    "failed": 0,
+    "cancelled": 0,
+    "skipped": 0,
+    "todo": 0,
+    "network": "stubbed; fictitious data only"
+  },
+  "android_verification": {
+    "command": "./scripts/verify.sh",
+    "result": "BUILD SUCCESSFUL",
+    "test_and_build_results_reused_as_up_to_date": true,
+    "app_files_compared_with_project_0_3_0_zip": 29,
+    "app_files_changed": 0,
+    "distributed_apks_identical": true,
+    "lint": "No issues found."
+  },
+  "setup_android_repeated_successfully": true,
+  "live_provider_connection_tested": false,
+  "real_credentials_configured": false,
+  "backend_deployed": false,
+  "android_sync_implemented": false,
+  "financial_database_modified": false,
+  "payments_implemented": false
+}

@@ -1,0 +1,51 @@
+{
+  "version": "0.1.0",
+  "package": "br.com.myfinancehub",
+  "minimum_android": "8.0 (API 26)",
+  "target_api": 35,
+  "build": "passed",
+  "lint": "No issues found.",
+  "test_runtime": "Robolectric Android API 28 + pure JVM",
+  "suites": [
+    {
+      "name": "br.com.myfinancehub.FinanceStoreTest",
+      "tests": 14,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    },
+    {
+      "name": "br.com.myfinancehub.MainActivityTest",
+      "tests": 6,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    },
+    {
+      "name": "br.com.myfinancehub.MoneyTest",
+      "tests": 4,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    },
+    {
+      "name": "br.com.myfinancehub.StatementImporterTest",
+      "tests": 24,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    }
+  ],
+  "total_tests": 48,
+  "apk_sha256": "c633bb30ed626e1ed08f67313e1fdc0eb507e15ac5f5bbca829c950845514c16",
+  "apk_signature": "Verified: APK Signature Scheme v2, development key",
+  "physical_device": "Not tested; follow docs/TESTES-NO-CELULAR.md",
+  "emulator": {
+    "android": "15 (API 35)",
+    "installation": "passed",
+    "launch": "passed",
+    "screenshot": "artifacts/screenshots/painel-inicial.png",
+    "fatal_app_exception_observed": false,
+    "physical_device_test_replaced": false
+  }
+}

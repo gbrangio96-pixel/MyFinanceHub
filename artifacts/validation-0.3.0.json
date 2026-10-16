@@ -1,0 +1,237 @@
+{
+  "version": "0.3.0",
+  "version_code": 5,
+  "package": "br.com.myfinancehub",
+  "minimum_api": 26,
+  "target_api": 35,
+  "build": "passed",
+  "verification_tasks": [
+    "assembleLocalDebug",
+    "assembleNotificationsDebug",
+    "testLocalDebugUnitTest",
+    "testNotificationsDebugUnitTest",
+    "lintLocalDebug",
+    "lintNotificationsDebug"
+  ],
+  "apks": {
+    "local": {
+      "path": "artifacts/MyFinanceHub-0.3.0-local-debug.apk",
+      "bytes": 189490,
+      "sha256": "d74d33dacc2393851ca4dc1c2e388e4c92aeb01813c3a972ad684903bbbd63fd",
+      "certificate_sha256": "3aed65b8149ccd92287cc1055b57a5ae6b909f12d9282ffab221c24a8dadb446",
+      "signature_v2_valid": true,
+      "zipalign_valid": true,
+      "notification_listener_registered": false,
+      "uses_permissions": []
+    },
+    "notifications": {
+      "path": "artifacts/MyFinanceHub-0.3.0-notifications-debug.apk",
+      "bytes": 198979,
+      "sha256": "c52328e1d320f6b5334ce9d80b795c28ae8d41aa14fd90814010f92faa9380df",
+      "certificate_sha256": "3aed65b8149ccd92287cc1055b57a5ae6b909f12d9282ffab221c24a8dadb446",
+      "signature_v2_valid": true,
+      "zipalign_valid": true,
+      "notification_listener_registered": true,
+      "uses_permissions": []
+    }
+  },
+  "tests": {
+    "local": {
+      "suites": [
+        {
+          "name": "br.com.myfinancehub.AppAppearanceTest",
+          "tests": 4,
+          "failures": 0,
+          "errors": 0,
+          "skipped": 0
+        },
+        {
+          "name": "br.com.myfinancehub.FinanceStoreTest",
+          "tests": 23,
+          "failures": 0,
+          "errors": 0,
+          "skipped": 0
+        },
+        {
+          "name": "br.com.myfinancehub.LocalBuildTest",
+          "tests": 3,
+          "failures": 0,
+          "errors": 0,
+          "skipped": 0
+        },
+        {
+          "name": "br.com.myfinancehub.MainActivityTest",
+          "tests": 18,
+          "failures": 0,
+          "errors": 0,
+          "skipped": 0
+        },
+        {
+          "name": "br.com.myfinancehub.MoneyTest",
+          "tests": 4,
+          "failures": 0,
+          "errors": 0,
+          "skipped": 0
+        },
+        {
+          "name": "br.com.myfinancehub.NotificationCaptureServiceTest",
+          "tests": 7,
+          "failures": 0,
+          "errors": 0,
+          "skipped": 7
+        },
+        {
+          "name": "br.com.myfinancehub.NotificationFlowTest",
+          "tests": 11,
+          "failures": 0,
+          "errors": 0,
+          "skipped": 11
+        },
+        {
+          "name": "br.com.myfinancehub.NotificationInboxTest",
+          "tests": 12,
+          "failures": 0,
+          "errors": 0,
+          "skipped": 0
+        },
+        {
+          "name": "br.com.myfinancehub.NotificationParserTest",
+          "tests": 18,
+          "failures": 0,
+          "errors": 0,
+          "skipped": 0
+        },
+        {
+          "name": "br.com.myfinancehub.StatementImporterTest",
+          "tests": 36,
+          "failures": 0,
+          "errors": 0,
+          "skipped": 0
+        }
+      ],
+      "totals": {
+        "tests": 136,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 18,
+        "passed": 118
+      },
+      "lint": "No issues found."
+    },
+    "notifications": {
+      "suites": [
+        {
+          "name": "br.com.myfinancehub.AppAppearanceTest",
+          "tests": 4,
+          "failures": 0,
+          "errors": 0,
+          "skipped": 0
+        },
+        {
+          "name": "br.com.myfinancehub.FinanceStoreTest",
+          "tests": 23,
+          "failures": 0,
+          "errors": 0,
+          "skipped": 0
+        },
+        {
+          "name": "br.com.myfinancehub.LocalBuildTest",
+          "tests": 3,
+          "failures": 0,
+          "errors": 0,
+          "skipped": 3
+        },
+        {
+          "name": "br.com.myfinancehub.MainActivityTest",
+          "tests": 18,
+          "failures": 0,
+          "errors": 0,
+          "skipped": 0
+        },
+        {
+          "name": "br.com.myfinancehub.MoneyTest",
+          "tests": 4,
+          "failures": 0,
+          "errors": 0,
+          "skipped": 0
+        },
+        {
+          "name": "br.com.myfinancehub.NotificationCaptureServiceTest",
+          "tests": 7,
+          "failures": 0,
+          "errors": 0,
+          "skipped": 0
+        },
+        {
+          "name": "br.com.myfinancehub.NotificationFlowTest",
+          "tests": 11,
+          "failures": 0,
+          "errors": 0,
+          "skipped": 0
+        },
+        {
+          "name": "br.com.myfinancehub.NotificationInboxTest",
+          "tests": 12,
+          "failures": 0,
+          "errors": 0,
+          "skipped": 0
+        },
+        {
+          "name": "br.com.myfinancehub.NotificationParserTest",
+          "tests": 18,
+          "failures": 0,
+          "errors": 0,
+          "skipped": 0
+        },
+        {
+          "name": "br.com.myfinancehub.StatementImporterTest",
+          "tests": 36,
+          "failures": 0,
+          "errors": 0,
+          "skipped": 0
+        }
+      ],
+      "totals": {
+        "tests": 136,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 3,
+        "passed": 133
+      },
+      "lint": "No issues found."
+    }
+  },
+  "financial_schema": 1,
+  "financial_backup_version": 1,
+  "financial_core_identical_to_0_2_1": true,
+  "appearance": {
+    "choices": [
+      "system",
+      "light",
+      "dark"
+    ],
+    "default": "system",
+    "persists_locally": true,
+    "included_in_financial_backup": false
+  },
+  "emulator": {
+    "android_api": 35,
+    "upgrade_without_uninstall_or_clear": true,
+    "final_activity_launch": "passed",
+    "checked_screens": [
+      "light dashboard",
+      "dark dashboard",
+      "dark transactions",
+      "dark entry dialog"
+    ],
+    "font_scale_1_3": "passed; complete navigation labels without overlap",
+    "limitations": "Software emulator only; physical S22 Ultra validation and Play Protect acceptance of 0.3.0 not confirmed."
+  },
+  "screenshots": [
+    "artifacts/screenshots/0.3.0/painel-claro.png",
+    "artifacts/screenshots/0.3.0/painel-escuro.png",
+    "artifacts/screenshots/0.3.0/lancamentos-escuro.png",
+    "artifacts/screenshots/0.3.0/formulario-escuro.png",
+    "artifacts/screenshots/0.3.0/fonte-maior.png"
+  ]
+}

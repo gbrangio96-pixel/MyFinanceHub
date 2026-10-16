@@ -1,0 +1,71 @@
+plugins {
+    id 'com.android.application'
+}
+
+android {
+    namespace 'br.com.myfinancehub'
+    compileSdk 35
+
+    defaultConfig {
+        applicationId 'br.com.myfinancehub'
+        minSdk 26
+        targetSdk 35
+        versionCode 5
+        versionName '0.3.0'
+        testInstrumentationRunner 'android.test.InstrumentationTestRunner'
+    }
+
+    buildFeatures {
+        buildConfig true
+    }
+
+    flavorDimensions 'mode'
+    productFlavors {
+        // The documented default APK is local; notifications is an explicit optional build.
+        local {
+            dimension 'mode'
+            buildConfigField 'boolean', 'NOTIFICATION_CAPTURE_ENABLED', 'false'
+        }
+        notifications {
+            dimension 'mode'
+            buildConfigField 'boolean', 'NOTIFICATION_CAPTURE_ENABLED', 'true'
+        }
+    }
+
+    buildTypes {
+        release {
+            minifyEnabled false
+        }
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+
+    testOptions {
+        unitTests.includeAndroidResources = true
+    }
+}
+
+dependencies {
+    testImplementation 'junit:junit:4.13.2'
+    testImplementation 'org.robolectric:robolectric:4.14.1'
+}
+
+tasks.withType(Test).configureEach {
+    // Isolate Robolectric's cache and download lock from the machine user's home.
+    def robolectricHome = new File(gradle.gradleUserHomeDir, 'robolectric-home')
+    systemProperty 'user.home', robolectricHome.absolutePath
+    doFirst {
+        robolectricHome.mkdirs()
+    }
+    // Robolectric resolves its Android runtime in a separate worker JVM.
+    ['http.proxyHost', 'http.proxyPort', 'https.proxyHost', 'https.proxyPort',
+     'http.nonProxyHosts', 'javax.net.ssl.trustStore', 'javax.net.ssl.trustStorePassword'].each { key ->
+        if (System.getProperty(key)) {
+            systemProperty key, System.getProperty(key)
+        }
+    }
+    systemProperty 'robolectric.dependency.repo.url', 'https://repo.maven.apache.org/maven2'
+}

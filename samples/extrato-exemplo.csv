@@ -1,0 +1,5 @@
+data;descrição;valor;tipo;categoria;cartão;id
+01/10/2026;Salário fictício — apenas demonstração;5000,00;entrada;Salário;;DEMO-CSV-001
+02/10/2026;Mercado fictício — apenas demonstração;-185,47;saída;Alimentação;;DEMO-CSV-002
+03/10/2026;"Loja fictícia; compra de exemplo";79,90;despesa;Compras;Cartão fictício 1234;DEMO-CSV-003
+04/10/2026;Estorno fictício — apenas demonstração;19,90;receita;Compras;Cartão fictício 1234;DEMO-CSV-004

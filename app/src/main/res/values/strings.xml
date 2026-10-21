@@ -1,4 +1,10 @@
 <resources>
+    <string name="quote_auto_position">Atualizar este investimento por cotação</string>
+    <string name="quotes_auto_refresh">Atualizar ao abrir a carteira</string>
+    <string name="quotes_config_saved">Configuração salva neste aparelho.</string>
+    <string name="quotes_interrupted">Consulta interrompida ao sair da tela. Você pode tentar novamente.</string>
+    <string name="quotes_key_invalid">Confira a chave brapi antes de salvar.</string>
+    <string name="quotes_search_invalid">Informe o código ou nome do ativo, com até 80 caracteres.</string>
+    <string name="quotes_received">Cotação recebida. Confira o horário do dado.</string>
     <string name="credit_statement">Extrato de cartão de crédito</string>
-    <string name="capture_new_notifications">3. Capturar novas notificações</string>
 </resources>

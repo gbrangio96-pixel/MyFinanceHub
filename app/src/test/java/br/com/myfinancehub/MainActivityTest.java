@@ -59,7 +59,6 @@ public final class MainActivityTest {
         context.getSharedPreferences("appearance", Context.MODE_PRIVATE).edit().clear().commit();
         context.getSharedPreferences("MainActivity", Context.MODE_PRIVATE).edit().clear().commit();
         context.deleteDatabase("myfinancehub.db");
-        context.deleteDatabase("myfinancehub-notifications.db");
         controller = Robolectric.buildActivity(MainActivity.class).setup();
         activity = controller.get();
         store = new FinanceStore(context);
@@ -78,7 +77,6 @@ public final class MainActivityTest {
         }
         if (store != null) store.close();
         context.deleteDatabase("myfinancehub.db");
-        context.deleteDatabase("myfinancehub-notifications.db");
         context.getSharedPreferences("appearance", Context.MODE_PRIVATE).edit().clear().commit();
         context.getSharedPreferences("MainActivity", Context.MODE_PRIVATE).edit().clear().commit();
     }
@@ -101,11 +99,14 @@ public final class MainActivityTest {
         tab("Lançamentos");
         assertVisible("Seus lançamentos");
         assertVisible("Nenhum lançamento encontrado");
+        tab("Relatórios");
+        assertVisible("RESULTADO DO PERÍODO");
+        assertVisible("Gastos por categoria");
         tab("Carteira");
         assertVisible("Sua carteira");
         assertVisible("Principal");
         assertVisible("Cada cartão no seu lugar");
-        tab("Categorias");
+        openCategories();
         assertVisible("+ Nova categoria");
         assertNotNull(byDescription(screen(), "Buscar categoria"));
         tab("Ajustes");
@@ -145,7 +146,7 @@ public final class MainActivityTest {
     }
 
     @Test public void categoryAndEntryCrudThroughDialogsPreservesUncategorizedEntry() {
-        tab("Categorias");
+        openCategories();
         clickText(screen(), "+ Nova categoria");
         AlertDialog categoryDialog = dialog();
         edit(categoryDialog, "Nome").setText("Cafeteria");
@@ -180,7 +181,7 @@ public final class MainActivityTest {
         assertEquals(-2055, store.totalBalance());
         assertVisible("Café e lanche");
 
-        tab("Categorias");
+        openCategories();
         clickClickable(byDescription(screen(), "Editar categoria Cafeteria"));
         categoryDialog = dialog();
         edit(categoryDialog, "Nome").setText("Café");
@@ -225,7 +226,7 @@ public final class MainActivityTest {
     @Test public void categorySearchLeavesDirectEditAndDeleteControlsForMatchingCategory() {
         store.saveCategory(new Models.Category(0, "Cuidados do pet", "expense"));
         store.saveCategory(new Models.Category(0, "Material escolar", "expense"));
-        tab("Categorias");
+        openCategories();
         View search = byDescription(screen(), "Buscar categoria");
         assertTrue(search instanceof EditText);
         ((EditText) search).setText("cuidados");
@@ -375,9 +376,10 @@ public final class MainActivityTest {
         assertContains(screen(), "R$ 1.234,56");
         assertContains(screen(), "R$ 6.200,00");
         assertNotNull(byText(screen(), "Total aplicado"));
-        assertNotNull(byText(screen(), "Variação"));
+        assertNotNull(byText(screen(), "Rentabilidade simples"));
         assertContains((View) byText(screen(), "Total aplicado").getParent(), "R$ 6.000,00");
-        assertContains((View) byText(screen(), "Variação").getParent(), "R$ 200,00");
+        assertContains((View) byText(screen(), "Rentabilidade simples").getParent(), "R$ 200,00");
+        assertContains((View) byText(screen(), "Rentabilidade simples").getParent(), "3,33%");
         assertEquals(123456, store.totalBalance());
         assertTrue(store.entries().isEmpty());
         assertNull(byText(screen(), "Últimos lançamentos"));
@@ -551,7 +553,10 @@ public final class MainActivityTest {
         assertNotNull(expenseLabel);
         assertContains((View) incomeLabel.getParent(), "R$ 0,00");
         assertContains((View) expenseLabel.getParent(), "R$ 0,00");
-        assertVisible("Seu mapa de gastos começa aqui");
+        tab("Relatórios");
+        assertVisible("Nenhuma despesa no período");
+        assertContains((View) byText(screen(), "Entradas").getParent(), "R$ 0,00");
+        assertContains((View) byText(screen(), "Despesas").getParent(), "R$ 0,00");
         tab("Lançamentos");
         assertVisible("Envio para Reserva");
         assertVisible("Recebimento na Reserva");
@@ -680,6 +685,11 @@ public final class MainActivityTest {
 
     private View screen() { return activity.findViewById(android.R.id.content); }
     private void tab(String name) { clickClickable(byDescription(screen(), name)); idle(); }
+    private void openCategories() {
+        tab("Lançamentos");
+        clickClickable(byDescription(screen(), "Gerenciar categorias"));
+        assertVisible("Categorias");
+    }
     private void assertVisible(String text) { assertNotNull("Missing text: " + text, byText(screen(), text)); }
     private static void assertContains(View root, String text) {
         List<String> texts = new ArrayList<>(); collectTexts(root, texts);

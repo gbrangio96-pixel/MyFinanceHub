@@ -14,10 +14,12 @@ import org.json.JSONTokener;
 
 import java.math.BigDecimal;
 import java.math.BigInteger;
+import java.math.RoundingMode;
 import java.nio.charset.StandardCharsets;
 import java.text.ParseException;
 import java.text.SimpleDateFormat;
 import java.time.Instant;
+import java.time.format.DateTimeParseException;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -40,7 +42,7 @@ import br.com.myfinancehub.Models.Investment;
  */
 public final class FinanceStore implements AutoCloseable {
     private final Helper helper;
-    private static final int BACKUP_VERSION = 2;
+    private static final int BACKUP_VERSION = 3;
     private static final int MAX_BACKUP_BYTES = 8 * 1024 * 1024;
     private static final BigInteger MAX_CENTS = BigInteger.valueOf(Long.MAX_VALUE);
     private static final BigInteger MIN_CENTS = BigInteger.valueOf(Long.MIN_VALUE);
@@ -197,13 +199,12 @@ public final class FinanceStore implements AutoCloseable {
     public synchronized List<Investment> investments() {
         List<Investment> result = new ArrayList<>();
         try (Cursor c = db().query("investments", null, null, null, null, null, "name COLLATE NOCASE, _id")) {
-            while (c.moveToNext()) result.add(new Investment(number(c, "_id"), string(c, "name"),
-                    string(c, "ticker"), string(c, "kind"), number(c, "invested_cents"), number(c, "current_cents")));
+            while (c.moveToNext()) result.add(investment(c));
         }
         return result;
     }
 
-    /** Stores manually entered invested and current amounts; both must be zero or positive. */
+    /** Stores invested/current amounts and optional exact quantity/quote metadata. */
     public synchronized long saveInvestment(Investment investment) {
         ContentValues values = investmentValues(investment);
         investment.id = save("investments", investment.id, values);
@@ -211,6 +212,83 @@ public final class FinanceStore implements AutoCloseable {
     }
 
     public synchronized void deleteInvestment(long id) { delete("investments", id); }
+
+    /**
+     * Applies a BRL unit price to the same investment and quantity the request started with.
+     * Exact decimal multiplication is rounded once, at the final monetary amount. Stale
+     * requests never overwrite a newer price or a holding edited/deleted during the request.
+     * The invested amount, ledger and imported B3 report are never changed by a quote.
+     */
+    public synchronized boolean applyInvestmentQuote(long investmentId, String expectedTicker,
+            String expectedQuantity, String price, String quotedAt, String source) {
+        return applyInvestmentQuote(investmentId, expectedTicker, expectedQuantity,
+                null, null, price, quotedAt, source);
+    }
+
+    /**
+     * Refresh requests also compare the original valuation inside the database transaction.
+     * This check protects edits committed through a different FinanceStore instance while
+     * the network request was running; cost/name changes are intentionally preserved.
+     */
+    public synchronized boolean applyInvestmentQuote(long investmentId, String expectedTicker,
+            String expectedQuantity, long expectedCurrentCents, String expectedQuoteAt,
+            String price, String quotedAt, String source) {
+        if (expectedCurrentCents < 0) throw invalid("Valor anterior do investimento inválido.");
+        return applyInvestmentQuote(investmentId, expectedTicker, expectedQuantity,
+                Long.valueOf(expectedCurrentCents), text(expectedQuoteAt, "Data anterior da cotação", 40, true),
+                price, quotedAt, source);
+    }
+
+    private boolean applyInvestmentQuote(long investmentId, String expectedTicker,
+            String expectedQuantity, Long expectedCurrentCents, String expectedQuoteAt,
+            String price, String quotedAt, String source) {
+        positiveId(investmentId);
+        String ticker = quoteTicker(expectedTicker);
+        String quantity = decimalQuantity(expectedQuantity);
+        if (quantity.isEmpty() || new BigDecimal(quantity).signum() <= 0)
+            throw invalid("Informe uma quantidade maior que zero para atualizar a cotação.");
+        String unitPrice = decimalPrice(price);
+        String at = quoteTime(quotedAt);
+        if (!"brapi".equals(source)) throw invalid("Fonte de cotação inválida.");
+        long currentCents = quoteValue(quantity, unitPrice);
+        if (expectedCurrentCents != null && Thread.currentThread().isInterrupted()) return false;
+        SQLiteDatabase db = db();
+        db.beginTransaction();
+        try {
+            Investment current;
+            try (Cursor c = db.query("investments", null, "_id=?", args(investmentId), null, null, null)) {
+                if (!c.moveToFirst()) { db.setTransactionSuccessful(); return false; }
+                current = investment(c);
+            }
+            if (!ticker.equals(current.ticker.trim().toUpperCase(Locale.ROOT))
+                    || !quantity.equals(current.quantity)
+                    || expectedCurrentCents != null && (!current.autoQuote || current.currentCents != expectedCurrentCents
+                    || !current.quoteAt.equals(expectedQuoteAt))) {
+                db.setTransactionSuccessful(); return false;
+            }
+            if (!current.quoteAt.isEmpty() && !Instant.parse(at).isAfter(Instant.parse(current.quoteAt))) {
+                db.setTransactionSuccessful(); return false;
+            }
+            if (expectedCurrentCents != null && Thread.currentThread().isInterrupted()) {
+                db.setTransactionSuccessful(); return false;
+            }
+            current.currentCents = currentCents;
+            current.quotePrice = unitPrice; current.quoteAt = at; current.quoteSource = source;
+            db.update("investments", investmentValues(current), "_id=?", args(investmentId));
+            validateFinancialRanges();
+            db.setTransactionSuccessful();
+            return true;
+        } finally { db.endTransaction(); }
+    }
+
+    private static Investment investment(Cursor c) {
+        Investment investment = new Investment(number(c, "_id"), string(c, "name"),
+                string(c, "ticker"), string(c, "kind"), number(c, "invested_cents"), number(c, "current_cents"));
+        investment.quantity = string(c, "quantity"); investment.autoQuote = number(c, "auto_quote") == 1;
+        investment.quotePrice = string(c, "quote_price"); investment.quoteAt = string(c, "quote_at");
+        investment.quoteSource = string(c, "quote_source");
+        return investment;
+    }
 
     /** Last imported B3 custody report. Its values are separate from all manual investments. */
     public synchronized B3Portfolio.Snapshot b3Snapshot() {
@@ -306,7 +384,9 @@ public final class FinanceStore implements AutoCloseable {
                     .put("date", e.date).put("type", e.type).put("method", e.method)
                     .put("sourceKey", e.sourceKey).put("amountCents", e.amountCents));
             for (Investment i : investments()) investments.put(new JSONObject().put("id", i.id).put("name", i.name)
-                    .put("ticker", i.ticker).put("kind", i.kind).put("investedCents", i.investedCents).put("currentCents", i.currentCents));
+                    .put("ticker", i.ticker).put("kind", i.kind).put("investedCents", i.investedCents).put("currentCents", i.currentCents)
+                    .put("quantity", i.quantity).put("autoQuote", i.autoQuote).put("quotePrice", i.quotePrice)
+                    .put("quoteAt", i.quoteAt).put("quoteSource", i.quoteSource));
             String backup = root.put("categories", categories).put("accounts", accounts).put("cards", cards)
                     .put("entries", entries).put("investments", investments)
                     .put("b3", b3Json(b3Snapshot())).toString(2);
@@ -337,7 +417,7 @@ public final class FinanceStore implements AutoCloseable {
                 throw invalid("Backup JSON inválido.");
             JSONObject root = (JSONObject) parsed;
             long backupVersion = jsonLong(root, "version");
-            if (!"MyFinanceHub".equals(jsonString(root, "format")) || (backupVersion != 1 && backupVersion != BACKUP_VERSION))
+            if (!"MyFinanceHub".equals(jsonString(root, "format")) || backupVersion < 1 || backupVersion > BACKUP_VERSION)
                 throw invalid("Formato ou versão do backup não suportado.");
             JSONArray rows = root.getJSONArray("categories");
             for (int n = 0; n < rows.length(); n++) {
@@ -372,9 +452,16 @@ public final class FinanceStore implements AutoCloseable {
                 JSONObject r = rows.getJSONObject(n);
                 Investment i = new Investment(jsonLong(r, "id"), jsonString(r, "name"), jsonString(r, "ticker"),
                         jsonString(r, "kind"), jsonLong(r, "investedCents"), jsonLong(r, "currentCents"));
+                if (backupVersion >= 3) {
+                    i.quantity = r.has("quantity") ? jsonString(r, "quantity") : "";
+                    i.autoQuote = r.has("autoQuote") && jsonBoolean(r, "autoQuote");
+                    i.quotePrice = r.has("quotePrice") ? jsonString(r, "quotePrice") : "";
+                    i.quoteAt = r.has("quoteAt") ? jsonString(r, "quoteAt") : "";
+                    i.quoteSource = r.has("quoteSource") ? jsonString(r, "quoteSource") : "";
+                }
                 investmentValues(i); investments.add(i);
             }
-            if (backupVersion == 2) {
+            if (backupVersion >= 2) {
                 Object report = root.get("b3");
                 if (report != JSONObject.NULL) {
                     if (!(report instanceof JSONObject)) throw invalid("Relatório B3 inválido no backup.");
@@ -507,7 +594,63 @@ public final class FinanceStore implements AutoCloseable {
         values.put("ticker", text(investment.ticker, "Código", 30, true));
         values.put("kind", text(investment.kind, "Tipo de investimento", 80, true));
         values.put("invested_cents", investment.investedCents); values.put("current_cents", investment.currentCents);
+        String quantity = decimalQuantity(investment.quantity);
+        if (investment.autoQuote) {
+            quoteTicker(investment.ticker);
+            if (quantity.isEmpty() || new BigDecimal(quantity).signum() <= 0)
+                throw invalid("Informe uma quantidade maior que zero para atualizar automaticamente.");
+        }
+        String price = text(investment.quotePrice, "Preço da cotação", 40, true);
+        String at = text(investment.quoteAt, "Data da cotação", 40, true);
+        String source = text(investment.quoteSource, "Fonte da cotação", 40, true);
+        if (!price.isEmpty() || !at.isEmpty() || !source.isEmpty()) {
+            quoteTicker(investment.ticker);
+            price = decimalPrice(price); at = quoteTime(at);
+            if (!"brapi".equals(source)) throw invalid("Fonte de cotação inválida.");
+            if (quantity.isEmpty() || new BigDecimal(quantity).signum() <= 0
+                    || investment.currentCents != quoteValue(quantity, price))
+                throw invalid("A cotação não corresponde à quantidade e ao valor atual. Limpe a cotação para informar um valor manual.");
+        }
+        values.put("quantity", quantity); values.put("auto_quote", investment.autoQuote ? 1 : 0);
+        values.put("quote_price", price); values.put("quote_at", at); values.put("quote_source", source);
         return values;
+    }
+
+    private static String decimalQuantity(String value) {
+        String quantity = text(value, "Quantidade", 40, true);
+        if (quantity.isEmpty()) return "";
+        if (!quantity.matches("[0-9]{1,24}(\\.[0-9]{1,8})?"))
+            throw invalid("Quantidade inválida. Use até oito casas decimais e ponto como separador.");
+        return new BigDecimal(quantity).stripTrailingZeros().toPlainString();
+    }
+
+    private static String decimalPrice(String value) {
+        String price = text(value, "Preço da cotação", 40, false);
+        if (!price.matches("[0-9]{1,24}(\\.[0-9]{1,12})?") || new BigDecimal(price).signum() <= 0)
+            throw invalid("Preço da cotação inválido.");
+        return new BigDecimal(price).stripTrailingZeros().toPlainString();
+    }
+
+    private static String quoteTicker(String value) {
+        String ticker = text(value, "Código para cotação", 30, false).toUpperCase(Locale.ROOT);
+        if (!ticker.matches("[A-Z0-9][A-Z0-9.^-]{0,29}")) throw invalid("Código de ativo inválido para cotação.");
+        return ticker;
+    }
+
+    private static String quoteTime(String value) {
+        try {
+            Instant instant = Instant.parse(text(value, "Data da cotação", 40, false));
+            if (!instant.isAfter(Instant.EPOCH) || instant.isAfter(Instant.now().plusSeconds(600)))
+                throw invalid("Data da cotação inválida.");
+            return instant.toString();
+        } catch (DateTimeParseException error) { throw invalid("Data da cotação inválida."); }
+    }
+
+    private static long quoteValue(String quantity, String price) {
+        try {
+            return new BigDecimal(quantity).multiply(new BigDecimal(price))
+                    .setScale(2, RoundingMode.HALF_UP).movePointRight(2).longValueExact();
+        } catch (ArithmeticException error) { throw invalid("O valor da posição excede o limite monetário suportado."); }
     }
 
     private void validateEntryReferences(Entry entry, Set<Long> accountIds, Map<Long, Category> categoryIds, Set<Long> cardIds) {
@@ -704,6 +847,11 @@ public final class FinanceStore implements AutoCloseable {
         if (!(value instanceof String)) throw invalid("Campo de texto inválido no backup: " + key);
         return (String) value;
     }
+    private static boolean jsonBoolean(JSONObject object, String key) throws JSONException {
+        Object value = object.get(key);
+        if (!(value instanceof Boolean)) throw invalid("Campo booleano inválido no backup: " + key);
+        return (Boolean) value;
+    }
     private static String csv(String value) {
         String safe = value == null ? "" : value;
         if (!safe.isEmpty() && "=+-@\t\r\n".indexOf(safe.charAt(0)) >= 0) safe = "'" + safe;
@@ -712,7 +860,7 @@ public final class FinanceStore implements AutoCloseable {
     private static IllegalArgumentException invalid(String message) { return new IllegalArgumentException(message); }
 
     private static final class Helper extends SQLiteOpenHelper {
-        Helper(Context context) { super(context, "myfinancehub.db", null, 2); }
+        Helper(Context context) { super(context, "myfinancehub.db", null, 3); }
         @Override public void onConfigure(SQLiteDatabase db) { db.setForeignKeyConstraintsEnabled(true); }
         @Override public void onCreate(SQLiteDatabase db) {
             db.execSQL("CREATE TABLE categories (_id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL COLLATE NOCASE UNIQUE, type TEXT NOT NULL CHECK(type IN ('income','expense','both')))");
@@ -723,6 +871,7 @@ public final class FinanceStore implements AutoCloseable {
             db.execSQL("CREATE INDEX entries_category ON entries(category_id)");
             db.execSQL("CREATE INDEX entries_card ON entries(card_id)");
             db.execSQL("CREATE TABLE investments (_id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL, ticker TEXT NOT NULL, kind TEXT NOT NULL, invested_cents INTEGER NOT NULL CHECK(invested_cents>=0), current_cents INTEGER NOT NULL CHECK(current_cents>=0))");
+            addInvestmentQuoteColumns(db);
             createB3Tables(db);
             ContentValues account = new ContentValues(); account.put("name", "Principal"); account.put("opening_cents", 0);
             db.insertOrThrow("accounts", null, account);
@@ -737,11 +886,17 @@ public final class FinanceStore implements AutoCloseable {
             db.insertOrThrow("categories", null, values);
         }
         @Override public void onUpgrade(SQLiteDatabase db, int oldVersion, int newVersion) {
-            if (oldVersion == 1 && newVersion == 2) {
-                createB3Tables(db);
-                return;
-            }
-            throw new IllegalStateException("Migração de banco não suportada.");
+            if (oldVersion < 1 || oldVersion > 2 || newVersion != 3)
+                throw new IllegalStateException("Migração de banco não suportada.");
+            if (oldVersion < 2) createB3Tables(db);
+            addInvestmentQuoteColumns(db);
+        }
+        private static void addInvestmentQuoteColumns(SQLiteDatabase db) {
+            db.execSQL("ALTER TABLE investments ADD COLUMN quantity TEXT NOT NULL DEFAULT ''");
+            db.execSQL("ALTER TABLE investments ADD COLUMN auto_quote INTEGER NOT NULL DEFAULT 0 CHECK(auto_quote IN (0,1))");
+            db.execSQL("ALTER TABLE investments ADD COLUMN quote_price TEXT NOT NULL DEFAULT ''");
+            db.execSQL("ALTER TABLE investments ADD COLUMN quote_at TEXT NOT NULL DEFAULT ''");
+            db.execSQL("ALTER TABLE investments ADD COLUMN quote_source TEXT NOT NULL DEFAULT ''");
         }
         private static void createB3Tables(SQLiteDatabase db) {
             db.execSQL("CREATE TABLE b3_snapshots (_id INTEGER PRIMARY KEY CHECK(_id=1), as_of_date TEXT NOT NULL, imported_at TEXT NOT NULL, source_hash TEXT NOT NULL)");

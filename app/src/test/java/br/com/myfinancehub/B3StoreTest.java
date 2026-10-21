@@ -160,11 +160,11 @@ public final class B3StoreTest {
         assertEquals(before, store.exportBackup());
     }
 
-    @Test public void backupVersionTwoRoundTripsB3WithoutInventingHistoricalCost() throws Exception {
+    @Test public void currentBackupRoundTripsB3WithoutInventingHistoricalCost() throws Exception {
         Models.Investment manual = new Models.Investment(0, "Manual", "", "", 4000, 5000); store.saveInvestment(manual);
         store.replaceB3Snapshot(Arrays.asList(position("TEST3", "A", "1", 12345L), position("UNKNOWN", "A", "1", null)), DATE, HASH);
         String backup = store.exportBackup();
-        assertEquals(2, new JSONObject(backup).getInt("version"));
+        assertEquals(3, new JSONObject(backup).getInt("version"));
         store.clearB3Snapshot(); store.deleteInvestment(manual.id);
         store.restoreBackup(backup);
         assertEquals(backup, store.exportBackup());
@@ -195,7 +195,7 @@ public final class B3StoreTest {
         invalid(() -> store.restoreBackup(duplicate.toString())); assertEquals(before, store.exportBackup());
         JSONObject missing = new JSONObject(before); missing.remove("b3");
         invalid(() -> store.restoreBackup(missing.toString())); assertEquals(before, store.exportBackup());
-        JSONObject unsupported = new JSONObject(before); unsupported.put("version", 3);
+        JSONObject unsupported = new JSONObject(before); unsupported.put("version", 4);
         invalid(() -> store.restoreBackup(unsupported.toString())); assertEquals(before, store.exportBackup());
     }
 
@@ -223,9 +223,14 @@ public final class B3StoreTest {
         Models.Investment investment = new Models.Investment(0, "Investimento existente", "TEST3", "Ações", 500, 600); store.saveInvestment(investment);
         String before = store.exportBackup();
         store.close();
-        // Core table definitions are unchanged since schema 1. Remove only the schema-2 additions.
+        // Reconstruct the legacy investment table as well as removing schema-2 additions.
         try (SQLiteDatabase legacy = context.openOrCreateDatabase("myfinancehub.db", Context.MODE_PRIVATE, null)) {
-            legacy.execSQL("DROP TABLE b3_positions"); legacy.execSQL("DROP TABLE b3_snapshots"); legacy.setVersion(1);
+            legacy.execSQL("DROP TABLE b3_positions"); legacy.execSQL("DROP TABLE b3_snapshots");
+            legacy.execSQL("CREATE TABLE investments_legacy (_id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL, ticker TEXT NOT NULL, kind TEXT NOT NULL, invested_cents INTEGER NOT NULL CHECK(invested_cents>=0), current_cents INTEGER NOT NULL CHECK(current_cents>=0))");
+            legacy.execSQL("INSERT INTO investments_legacy SELECT _id,name,ticker,kind,invested_cents,current_cents FROM investments");
+            legacy.execSQL("DROP TABLE investments");
+            legacy.execSQL("ALTER TABLE investments_legacy RENAME TO investments");
+            legacy.setVersion(1);
         }
         store = new FinanceStore(context);
         assertEquals(before, store.exportBackup());

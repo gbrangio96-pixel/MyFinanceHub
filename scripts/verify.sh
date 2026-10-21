@@ -1,6 +1,5 @@
 #!/usr/bin/env bash
 set -euo pipefail
-# Validate both modes; produce both explicitly named APKs.
+# Validate and build the single Android app; market-data access is optional.
 exec "$(dirname "$0")/gradle.sh" --no-daemon \
-    testLocalDebugUnitTest testNotificationsDebugUnitTest \
-    lintLocalDebug lintNotificationsDebug assembleLocalDebug assembleNotificationsDebug "$@"
+    testDebugUnitTest lintDebug assembleDebug "$@"

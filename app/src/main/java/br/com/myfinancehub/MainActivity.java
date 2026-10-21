@@ -4,6 +4,7 @@ import android.app.Activity;
 import android.app.AlertDialog;
 import android.app.DatePickerDialog;
 import android.content.Intent;
+import android.content.ClipData;
 import android.graphics.Canvas;
 import android.graphics.Color;
 import android.graphics.Paint;
@@ -36,16 +37,14 @@ public final class MainActivity extends Activity {
     private int BG, GREEN, LIME, TEXT, MUTED, LINE, RED, WHITE;
     private boolean darkTheme;
     private static final int PAGE_SIZE=30;
-    private static final int IMPORT=41, BACKUP=42, RESTORE=43, CSV=44, B3_IMPORT=45;
-    private static final boolean NOTIFICATIONS_ENABLED=BuildConfig.NOTIFICATION_CAPTURE_ENABLED;
+    private static final int IMPORT=41, BACKUP=42, RESTORE=43, CSV=44, B3_IMPORT=45, REPORT_PDF=46, REPORT_CSV=47;
     private static final String[] METHOD_KEYS={"other","pix","debit","credit","cash","transfer","card_payment"};
     private static final String[] METHOD_NAMES={"Outro / extrato","PIX (registro manual)","Débito","Crédito","Dinheiro","Transferência entre minhas contas","Pagamento de fatura"};
     private FinanceStore store;
-    private NotificationInbox notificationInbox;
     private LinearLayout root, content, navigation;
     private ScrollView screenScroll;
     private int renderedPage=-1;
-    private final int[] pageScroll=new int[7];
+    private final int[] pageScroll=new int[8];
     private boolean firstResume=true;
     private YearMonth month=YearMonth.now();
     private int page=0, filter=0;
@@ -55,12 +54,28 @@ public final class MainActivity extends Activity {
     private int visibleEntries=PAGE_SIZE;
     private String b3Search="";
     private int visibleB3Positions=PAGE_SIZE;
+    private LocalDate reportFrom=YearMonth.now().atDay(1),reportTo=YearMonth.now().atEndOfMonth();
+    private int reportPreset=0;
+    private long reportAccountId=0;
+    private boolean allReportCategories=false;
+    private PendingReport pendingReport;
+    private static final class PendingReport {
+        final FinanceReport report;final int request;
+        PendingReport(FinanceReport report,int request){this.report=report;this.request=request;}
+    }
     private List<Models.Category> categoryCache=Collections.emptyList();
     private List<Models.Account> accountCache=Collections.emptyList();
     private List<Models.Card> cardCache=Collections.emptyList();
     private List<Models.Entry> entryCache=Collections.emptyList();
+    private Map<String,InvestmentQuoteCache.Value> marketCache=Collections.emptyMap();
     private final ExecutorService worker=Executors.newSingleThreadExecutor();
     private AlertDialog activeProgress;
+    private final android.os.Handler quoteHandler=new android.os.Handler(android.os.Looper.getMainLooper());
+    private boolean quoteRefreshRunning=false;
+    private Future<?> automaticQuoteTask;
+    private int quoteGeneration=0;
+    private String lastQuoteSummary="";
+    private final Runnable quoteTick=new Runnable(){@Override public void run(){maybeAutomaticQuotes();quoteHandler.postDelayed(this,60_000);}};
 
     @Override public void onCreate(Bundle state) {
         setTheme(AppAppearance.themeRes(this));
@@ -69,12 +84,15 @@ public final class MainActivity extends Activity {
         BG=colors.background;GREEN=colors.primary;LIME=colors.accent;TEXT=colors.text;
         MUTED=colors.muted;LINE=colors.line;RED=colors.expense;WHITE=colors.surface;
         store=new FinanceStore(this);
-        notificationInbox=new NotificationInbox(this);
         hidden=getPreferences(0).getBoolean("hidden",false);
         if(state!=null){ page=state.getInt("page"); filter=state.getInt("filter");
             month=YearMonth.parse(state.getString("month",month.toString())); search=state.getString("search","");categorySearch=state.getString("categorySearch","");
             int[] savedScroll=state.getIntArray("page_scroll");if(savedScroll!=null)System.arraycopy(savedScroll,0,pageScroll,0,Math.min(savedScroll.length,pageScroll.length));
             visibleEntries=state.getInt("visible_entries",PAGE_SIZE);b3Search=state.getString("b3_search","");visibleB3Positions=state.getInt("b3_visible",PAGE_SIZE);}
+        if(state!=null){try{reportFrom=LocalDate.parse(state.getString("report_from",reportFrom.toString()));reportTo=LocalDate.parse(state.getString("report_to",reportTo.toString()));}catch(java.time.DateTimeException ignored){reportFrom=YearMonth.now().atDay(1);reportTo=YearMonth.now().atEndOfMonth();}
+            reportPreset=Math.max(0,Math.min(3,state.getInt("report_preset",0)));reportAccountId=state.getLong("report_account",0);allReportCategories=state.getBoolean("report_all_categories",false);}
+        Object retained=getLastNonConfigurationInstance();if(retained instanceof PendingReport)pendingReport=(PendingReport)retained;
+        if(page<0||page>=pageScroll.length||page==5)page=0;
         render();
     }
     @Override protected void onSaveInstanceState(Bundle state){
@@ -83,13 +101,24 @@ public final class MainActivity extends Activity {
         state.putString("categorySearch",categorySearch);
         rememberScroll();state.putIntArray("page_scroll",pageScroll);state.putInt("visible_entries",visibleEntries);
         state.putString("b3_search",b3Search);state.putInt("b3_visible",visibleB3Positions);
+        state.putString("report_from",reportFrom.toString());state.putString("report_to",reportTo.toString());state.putInt("report_preset",reportPreset);state.putLong("report_account",reportAccountId);state.putBoolean("report_all_categories",allReportCategories);
     }
-    @Override protected void onResume(){super.onResume();if(AppAppearance.isDark(this)!=darkTheme){recreate();return;}if(firstResume){firstResume=false;return;}if(store!=null&&notificationInbox!=null)render();}
-    @Override protected void onDestroy(){if(activeProgress!=null)activeProgress.dismiss();worker.execute(()->{store.close();notificationInbox.close();});worker.shutdown();super.onDestroy();}
+    @Override public Object onRetainNonConfigurationInstance(){return pendingReport;}
+    @Override protected void onResume(){super.onResume();if(AppAppearance.isDark(this)!=darkTheme){recreate();return;}if(firstResume)firstResume=false;else if(store!=null)render();quoteHandler.removeCallbacks(quoteTick);quoteHandler.post(quoteTick);}
+    @Override protected void onPause(){quoteHandler.removeCallbacksAndMessages(null);quoteGeneration++;if(automaticQuoteTask!=null)automaticQuoteTask.cancel(true);quoteRefreshRunning=false;super.onPause();}
+    @Override protected void onDestroy(){quoteHandler.removeCallbacksAndMessages(null);if(activeProgress!=null)activeProgress.dismiss();worker.execute(()->store.close());worker.shutdown();super.onDestroy();}
+
+    private void maybeAutomaticQuotes(){
+        if(isFinishing()||isDestroyed()||quoteRefreshRunning||activeProgress!=null||!(page==0||page==2||page==6)||!InvestmentQuoteUpdater.isAutomaticRefreshDue(this))return;
+        quoteRefreshRunning=true;final int generation=++quoteGeneration;
+        automaticQuoteTask=worker.submit(()->{String summary;try{summary=new InvestmentQuoteUpdater(getApplicationContext()).refresh(store,new InvestmentQuotes(),true).summary;}catch(Exception ex){summary="Cotações indisponíveis. Os valores anteriores foram mantidos.";}
+            final String result=summary;runOnUiThread(()->{if(generation!=quoteGeneration)return;quoteRefreshRunning=false;if(!isFinishing()&&!isDestroyed()){lastQuoteSummary=result;render();}});});
+    }
 
     private void render(){
         rememberScroll();
         categoryCache=store.categories();accountCache=store.accounts();cardCache=store.cards();entryCache=store.entries();
+        marketCache=InvestmentQuoteCache.snapshot(this);
         root=new LinearLayout(this);root.setOrientation(LinearLayout.VERTICAL);root.setBackgroundColor(BG);
         if(android.os.Build.VERSION.SDK_INT>=30){
             getWindow().setDecorFitsSystemWindows(false);
@@ -106,16 +135,17 @@ public final class MainActivity extends Activity {
         ScrollView scroll=new ScrollView(this);scroll.setFillViewport(true);screenScroll=scroll;renderedPage=page;
         content=column();content.setPadding(dp(22),dp(8),dp(22),dp(28));scroll.addView(content);
         root.addView(scroll,new LinearLayout.LayoutParams(-1,0,1));
-        if(page==0)dashboard();else if(page==1)transactions();else if(page==2)wallet();else if(page==4)categories();else if(page==5)notifications();else if(page==6)b3Screen();else settings();
+        if(page==0)dashboard();else if(page==1)transactions();else if(page==2)wallet();else if(page==4)categories();else if(page==6)b3Screen();else if(page==7)reports();else settings();
         navigation=row();navigation.setBackgroundColor(WHITE);navigation.setPadding(dp(6),dp(6),dp(6),dp(6));
-        String[] labels={"Painel","Lançamentos","Carteira","Categorias","Ajustes"};int[] targets={0,1,2,4,3};
-        for(int i=0;i<labels.length;i++){final int p=targets[i];boolean selected=p==page||page==5&&p==3||page==6&&p==2;LinearLayout item=column();item.setGravity(Gravity.CENTER);item.setPadding(0,dp(8),0,dp(6));
+        String[] labels={"Painel","Lançamentos","Relatórios","Carteira","Ajustes"};int[] targets={0,1,7,2,3};
+        for(int i=0;i<labels.length;i++){final int p=targets[i];boolean selected=p==page||page==4&&p==1||page==6&&p==2;LinearLayout item=column();item.setGravity(Gravity.CENTER);item.setPadding(0,dp(8),0,dp(6));
             item.setBackground(feedback(selected?colors.surfaceAlt:WHITE,16));item.setSelected(selected);
             item.addView(new NavIcon(this,p,selected?GREEN:MUTED),new LinearLayout.LayoutParams(dp(25),dp(25)));
             TextView label=text(labels[i],11,selected?GREEN:MUTED,selected);label.setGravity(Gravity.CENTER);label.setMaxLines(1);label.setHorizontallyScrolling(false);label.setEllipsize(android.text.TextUtils.TruncateAt.END);label.setAutoSizeTextTypeUniformWithConfiguration(9,11,1,android.util.TypedValue.COMPLEX_UNIT_SP);item.addView(label);
             item.setContentDescription(labels[i]);item.setOnClickListener(v->{if(page!=p){page=p;render();}});
             item.setMinimumHeight(dp(68));navigation.addView(item,new LinearLayout.LayoutParams(0,-2,1));}
         root.addView(navigation);
+        if(page==0||page==2||page==6)quoteHandler.post(this::maybeAutomaticQuotes);
         final int restoreY=pageScroll[page];
         scroll.getViewTreeObserver().addOnGlobalLayoutListener(new android.view.ViewTreeObserver.OnGlobalLayoutListener(){public void onGlobalLayout(){scroll.getViewTreeObserver().removeOnGlobalLayoutListener(this);if(screenScroll==scroll)scroll.scrollTo(0,restoreY);}});
     }
@@ -135,7 +165,7 @@ public final class MainActivity extends Activity {
         balance.addView(text("Disponível nas contas, sem somar os investimentos.",12,colors.heroMuted,false));
         add(balance,0,0,0,4);
 
-        section("Investimentos","Posições cadastradas manualmente");
+        section("Investimentos","Carteira cadastrada no app");
         List<Models.Investment> positions=store.investments();long invested=0,current=0;
         for(Models.Investment investment:positions){invested=Math.addExact(invested,investment.investedCents);current=Math.addExact(current,investment.currentCents);}
         long variation=Math.subtractExact(current,invested);
@@ -144,7 +174,7 @@ public final class MainActivity extends Activity {
         addTo(investments,text(money(current),30,TEXT,true),0,9,0,18);
         LinearLayout totals=row();
         LinearLayout applied=column();applied.addView(text("Total aplicado",12,MUTED,false));addTo(applied,text(money(invested),16,TEXT,true),0,5,0,0);
-        LinearLayout change=column();change.addView(text("Variação",12,MUTED,false));addTo(change,text((!hidden&&variation>0?"+ ":"")+money(variation),16,variation<0?RED:colors.income,true),0,5,0,0);
+        LinearLayout change=column();change.addView(text("Rentabilidade simples",12,MUTED,false));addTo(change,text((!hidden&&variation>0?"+ ":"")+money(variation),16,variation<0?RED:colors.income,true),0,5,0,0);addTo(change,text(returnPercent(invested,current),13,MUTED,false),0,5,0,0);
         totals.addView(applied,new LinearLayout.LayoutParams(0,-2,1));totals.addView(change,new LinearLayout.LayoutParams(0,-2,1));investments.addView(totals);
         if(positions.isEmpty())addTo(investments,text("Cadastre seus investimentos em Carteira para acompanhar as posições aqui.",13,MUTED,false),0,18,0,0);
         else{
@@ -153,15 +183,14 @@ public final class MainActivity extends Activity {
                 Models.Investment investment=positions.get(i);divider(investments);LinearLayout item=row();item.setPadding(0,dp(14),0,dp(14));
                 TextView name=text(investment.name+(investment.ticker.isEmpty()?"":" · "+investment.ticker),14,TEXT,true);name.setMaxLines(2);
                 item.addView(name,new LinearLayout.LayoutParams(0,-2,1));TextView value=text(money(investment.currentCents),14,TEXT,true);value.setPadding(dp(12),0,0,0);item.addView(value);
-                item.setContentDescription("Editar investimento "+investment.name);item.setBackground(feedback(WHITE,10));item.setOnClickListener(v->editInvestment(investment));investments.addView(item);
+                item.setContentDescription("Editar investimento "+investment.name+", "+money(investment.currentCents));item.setBackground(feedback(WHITE,10));item.setOnClickListener(v->editInvestment(investment));investments.addView(item);
             }
         }
         add(investments,0,0,0,14);
         Button wallet=button("Ver carteira",GREEN,colors.onPrimary);wallet.setOnClickListener(v->{page=2;render();});content.addView(wallet);
-        add(text("Valores de investimentos são informados manualmente. Não há atualização automática de cotações.",12,MUTED,false),0,12,0,0);
+        add(text("Rentabilidade simples compara valor atual e total aplicado, sem rendimentos pagos, impostos ou taxa anualizada. Cotações configuradas atualizam esta soma; posições manuais mantêm o valor informado.",12,MUTED,false),0,12,0,0);
         b3Summary(false);
-        if(NOTIFICATIONS_ENABLED){int pending=notificationInbox.pendingCount();
-            if(pending>0){section("Para revisar","Sugestões de novos lançamentos");action("Revisar notificações ("+pending+")","Confira os dados antes de salvar.",()->{page=5;render();});}}
+
     }
 
     private void monthlySummary(){
@@ -173,34 +202,20 @@ public final class MainActivity extends Activity {
         add(text("Inclui crédito. Pagamentos de fatura e transferências próprias ficam fora destes totais.",12,MUTED,false),0,8,0,2);
     }
 
-    private void spendingSummary(){
-        section("Para onde foi?","Despesas por categoria no mês");
-        LinkedHashMap<String,Long> totals=new LinkedHashMap<>();
-        for(Models.Entry e:monthlyEntries())if(e.type.equals("expense")&&!e.method.equals("card_payment")&&!e.method.equals("transfer")){String name=categoryName(e.categoryId);totals.put(name,Math.addExact(totals.getOrDefault(name,0L),e.amountCents));}
-        LinearLayout chart=box(WHITE);
-        if(totals.isEmpty())empty(chart,"Seu mapa de gastos começa aqui","Adicione uma saída ou importe um extrato para visualizar suas categorias.");
-        else{List<Map.Entry<String,Long>> items=new ArrayList<>(totals.entrySet());items.sort((a,b)->Long.compare(b.getValue(),a.getValue()));long max=items.get(0).getValue();
-            for(int i=0;i<Math.min(5,items.size());i++){Map.Entry<String,Long> entry=items.get(i);LinearLayout line=row();
-                TextView name=text(entry.getKey(),13,TEXT,false);line.addView(name,new LinearLayout.LayoutParams(0,-2,1));line.addView(text(money(entry.getValue()),13,TEXT,true));chart.addView(line);
-                LinearLayout track=row();track.setBackground(round(colors.surfaceAlt,5));LinearLayout fill=new LinearLayout(this);fill.setBackground(round(GREEN,5));
-                track.addView(fill,new LinearLayout.LayoutParams(0,dp(6),Math.max(0.01f,(float)entry.getValue()/max)));
-                track.addView(new Space(this),new LinearLayout.LayoutParams(0,1,Math.max(.001f,1f-(float)entry.getValue()/max)));addTo(chart,track,0,8,0,16);}}
-        content.addView(chart);
-    }
-
     private void transactions(){
         eyebrow("ENTRADAS E SAÍDAS");title("Seus lançamentos");
         LinearLayout actions=row();Button add=button("+  Novo lançamento",GREEN,colors.onPrimary);Button imp=button("Importar extrato",colors.surfaceAlt,GREEN);
         add.setContentDescription("Novo lançamento");imp.setContentDescription("Importar extrato");
         add.setOnClickListener(v->editEntry(null));imp.setOnClickListener(v->chooseDocument(IMPORT));
-        actions.addView(add,new LinearLayout.LayoutParams(0,-2,1));Space s=new Space(this);actions.addView(s,new LinearLayout.LayoutParams(dp(8),1));actions.addView(imp,new LinearLayout.LayoutParams(0,-2,1));add(actions,0,16,0,0);monthSelector();monthlySummary();
+        actions.addView(add,new LinearLayout.LayoutParams(0,-2,1));Space s=new Space(this);actions.addView(s,new LinearLayout.LayoutParams(dp(8),1));actions.addView(imp,new LinearLayout.LayoutParams(0,-2,1));add(actions,0,16,0,12);
+        action("Gerenciar categorias","Criar, editar e excluir categorias.",()->{page=4;render();});monthSelector();monthlySummary();
         LinearLayout chips=row();String[] names={"Todos","Entradas","Saídas"};
         for(int i=0;i<3;i++){final int f=i;TextView chip=text(names[i],13,filter==i?colors.onPrimary:GREEN,true);chip.setGravity(Gravity.CENTER);chip.setPadding(dp(12),dp(12),dp(12),dp(12));chip.setMinHeight(dp(48));chip.setSelected(filter==i);chip.setContentDescription(names[i]);chip.setBackground(feedback(filter==i?GREEN:colors.surfaceAlt,16));chip.setOnClickListener(v->{if(filter!=f){filter=f;visibleEntries=PAGE_SIZE;render();}});
             LinearLayout.LayoutParams lp=new LinearLayout.LayoutParams(0,-2,1);lp.setMargins(i==0?0:dp(6),dp(14),0,dp(12));chips.addView(chip,lp);}content.addView(chips);
         EditText searchField=input("Buscar descrição",search,InputType.TYPE_CLASS_TEXT);searchField.setSingleLine(true);
         content.addView(searchField);LinearLayout list=box(WHITE);add(list,0,12,0,0);fillEntries(list,search);
         searchField.addTextChangedListener(new android.text.TextWatcher(){public void beforeTextChanged(CharSequence s,int a,int c,int f){}public void onTextChanged(CharSequence s,int st,int before,int count){search=s.toString();visibleEntries=PAGE_SIZE;fillEntries(list,search);}public void afterTextChanged(android.text.Editable e){}});
-        spendingSummary();
+        Button detail=button("Ver relatório do mês",colors.surfaceAlt,GREEN);detail.setOnClickListener(v->{reportPreset=3;reportFrom=month.atDay(1);reportTo=month.atEndOfMonth();reportAccountId=0;pageScroll[7]=0;page=7;render();});add(detail,0,16,0,0);
     }
     private void fillEntries(LinearLayout list,String query){list.removeAllViews();int count=0;
         for(Models.Entry e:monthlyEntries())if((filter==0||filter==1&&e.type.equals("income")||filter==2&&e.type.equals("expense"))&&normalize(e.description).contains(normalize(query))){if(count<visibleEntries)entryRow(list,e);count++;}
@@ -208,8 +223,94 @@ public final class MainActivity extends Activity {
         if(count>visibleEntries){Button more=button("Mostrar mais ("+visibleEntries+" de "+count+")",WHITE,GREEN);more.setOnClickListener(v->{visibleEntries+=PAGE_SIZE;fillEntries(list,query);});list.addView(more);}
     }
 
+    private FinanceReport buildReport(){
+        return FinanceReport.build(reportFrom,reportTo,reportAccountId,store.entries(),store.accounts(),store.categories(),store.cards(),store.investments(),store.b3Snapshot());
+    }
+    private void reports(){
+        eyebrow("CLAREZA PARA DECIDIR");title("Relatórios");
+        add(text("Entradas, despesas e resultado do período.",14,MUTED,false),0,6,0,18);
+        if(reportAccountId!=0&&accountCache.stream().noneMatch(a->a.id==reportAccountId))reportAccountId=0;
+        LinearLayout filters=box(WHITE);
+        Spinner period=select(filters,"Período do relatório",new String[]{"Este mês","Últimos 3 meses","Este ano","Personalizado"},reportPreset);
+        ArrayList<String> accounts=new ArrayList<>();accounts.add("Todas as contas");int selectedAccount=0;
+        for(Models.Account account:accountCache){accounts.add(account.name);if(account.id==reportAccountId)selectedAccount=accounts.size()-1;}
+        Spinner account=select(filters,"Conta do relatório",accounts.toArray(new String[0]),selectedAccount);
+        addTo(filters,text("De "+fullDate(reportFrom)+" a "+fullDate(reportTo),13,GREEN,true),0,16,0,2);
+        if(reportPreset==3){
+            Button from=button("De: "+fullDate(reportFrom),colors.surfaceAlt,GREEN);from.setContentDescription("Data inicial do relatório");from.setOnClickListener(v->chooseReportDate(true));
+            Button to=button("Até: "+fullDate(reportTo),colors.surfaceAlt,GREEN);to.setContentDescription("Data final do relatório");to.setOnClickListener(v->chooseReportDate(false));
+            addTo(filters,from,0,12,0,8);filters.addView(to,new LinearLayout.LayoutParams(-1,-2));
+        }
+        add(filters,0,0,0,18);
+        period.setOnItemSelectedListener(selected(()->{int value=period.getSelectedItemPosition();if(value!=reportPreset){reportPreset=value;setReportPreset(value);allReportCategories=false;pageScroll[7]=0;render();}}));
+        account.setOnItemSelectedListener(selected(()->{int index=account.getSelectedItemPosition();long id=index==0?0:accountCache.get(index-1).id;if(id!=reportAccountId){reportAccountId=id;allReportCategories=false;render();}}));
+        final FinanceReport report;
+        try{report=buildReport();}catch(IllegalArgumentException ex){LinearLayout problem=box(WHITE);empty(problem,"Confira o período",safeError(ex));content.addView(problem);return;}
+        LinearLayout result=box(colors.hero);result.addView(text("RESULTADO DO PERÍODO",12,colors.heroMuted,true));
+        addTo(result,text(money(report.resultCents),32,colors.heroText,true),0,10,0,8);
+        result.addView(text("Entradas menos despesas · "+report.transactions.size()+" lançamentos",12,colors.heroMuted,false));add(result,0,0,0,12);
+        LinearLayout metrics=getResources().getConfiguration().fontScale>1.3f?column():row();
+        if(metrics.getOrientation()==LinearLayout.VERTICAL){addTo(metrics,metric("Entradas",report.incomeCents,colors.income),0,0,0,10);metrics.addView(metric("Despesas",report.expenseCents,RED));}
+        else{metrics.addView(metric("Entradas",report.incomeCents,colors.income),new LinearLayout.LayoutParams(0,-2,1));metrics.addView(new Space(this),new LinearLayout.LayoutParams(dp(10),1));metrics.addView(metric("Despesas",report.expenseCents,RED),new LinearLayout.LayoutParams(0,-2,1));}
+        content.addView(metrics);
+        add(text("Compras no crédito entram nas despesas. Transferências próprias e pagamentos de fatura ficam fora do resultado.",12,MUTED,false),0,10,0,0);
+        if(report.transactions.isEmpty()){LinearLayout empty=box(WHITE);empty(empty,"Seu relatório começa aqui","Adicione lançamentos ou importe um extrato. Você também pode escolher outro período ou conta.");add(empty,0,18,0,0);}
+        section("Exportar relatório","O arquivo usa o período e a conta selecionados acima");
+        Button pdf=button("Salvar PDF",GREEN,colors.onPrimary);pdf.setOnClickListener(v->exportReport(report,REPORT_PDF,false));content.addView(pdf,new LinearLayout.LayoutParams(-1,-2));
+        LinearLayout export=row();Button share=button("Compartilhar PDF",colors.surfaceAlt,GREEN);share.setOnClickListener(v->exportReport(report,REPORT_PDF,true));
+        Button csv=button("Exportar CSV",colors.surfaceAlt,GREEN);csv.setOnClickListener(v->exportReport(report,REPORT_CSV,false));
+        if(getResources().getConfiguration().fontScale>1.3f){add(share,0,10,0,8);content.addView(csv,new LinearLayout.LayoutParams(-1,-2));}
+        else{export.addView(share,new LinearLayout.LayoutParams(0,-2,1));export.addView(new Space(this),new LinearLayout.LayoutParams(dp(8),1));export.addView(csv,new LinearLayout.LayoutParams(0,-2,1));add(export,0,10,0,0);}
+        add(text("PDF: resumo e lançamentos detalhados. CSV: lançamentos para planilha. Os arquivos contêm os valores completos.",12,MUTED,false),0,10,0,0);
+        section("Gastos por categoria","Despesas do período, incluindo compras no crédito");
+        LinearLayout categories=box(WHITE);
+        if(report.expenseCategories.isEmpty())empty(categories,"Nenhuma despesa no período","As categorias aparecerão quando houver saídas nos filtros selecionados.");
+        else{
+            int shown=allReportCategories?report.expenseCategories.size():Math.min(8,report.expenseCategories.size());
+            for(int i=0;i<shown;i++){FinanceReport.CategoryTotal category=report.expenseCategories.get(i);LinearLayout heading=row();TextView name=text(category.categoryName,14,TEXT,true);heading.addView(name,new LinearLayout.LayoutParams(0,-2,1));
+                TextView value=text(money(category.amountCents),14,TEXT,true);value.setPadding(dp(10),0,0,0);heading.addView(value);categories.addView(heading);
+                double ratio=report.expenseCents==0?0:(double)category.amountCents/report.expenseCents;
+                LinearLayout bar=row();bar.setBackground(round(colors.surfaceAlt,4));View fill=new View(this);fill.setBackground(round(GREEN,4));bar.addView(fill,new LinearLayout.LayoutParams(0,dp(6),(float)Math.max(.005,ratio)));bar.addView(new Space(this),new LinearLayout.LayoutParams(0,1,(float)Math.max(.001,1-ratio)));bar.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);addTo(categories,bar,0,9,0,16);
+            }
+            if(shown<report.expenseCategories.size()){Button more=button("Mostrar todas as categorias",colors.surfaceAlt,GREEN);more.setOnClickListener(v->{allReportCategories=true;render();});categories.addView(more);}
+        }
+        content.addView(categories);
+        if(report.months.size()>1){
+            section("Comparação mensal","Entradas, despesas e resultado em cada mês");LinearLayout comparison=box(WHITE);
+            int first=Math.max(0,report.months.size()-12);
+            for(int i=first;i<report.months.size();i++){FinanceReport.MonthTotal m=report.months.get(i);if(i>first)divider(comparison);
+                addTo(comparison,text(m.month.format(DateTimeFormatter.ofPattern("MMM/yyyy",new Locale("pt","BR"))),14,TEXT,true),0,12,0,8);
+                comparison.addView(text("Entradas  "+money(m.incomeCents)+"\nDespesas  "+money(m.expenseCents),13,MUTED,false));
+                addTo(comparison,text("Resultado  "+money(m.resultCents),15,m.resultCents<0?RED:colors.income,true),0,7,0,14);
+            }
+            if(first>0)comparison.addView(text("Últimos 12 meses na tela. O PDF inclui todos os meses selecionados.",12,MUTED,false));content.addView(comparison);
+        }
+        section("Movimentação nas contas","Separada do resultado para evitar duplicidade");
+        LinearLayout cash=box(WHITE);cash.addView(text("Movimento de caixa  "+money(report.cashMovementCents),16,TEXT,true));
+        addTo(cash,text("Entradas menos saídas que afetam as contas. Inclui faturas e transferências; exclui compras e estornos no crédito. Não é o saldo inicial ou final do período.",12,MUTED,false),0,8,0,14);
+        cash.addView(text("Transferências recebidas  "+money(report.transferIncomeCents)+"\nTransferências enviadas  "+money(report.transferExpenseCents)+"\nFaturas pagas  "+money(report.cardPaymentExpenseCents),13,MUTED,false));
+        if(report.cardPaymentIncomeCents>0)addTo(cash,text("Entradas de pagamento de fatura  "+money(report.cardPaymentIncomeCents),13,MUTED,false),0,4,0,0);content.addView(cash);
+    }
+    private String fullDate(LocalDate date){return date.format(DateTimeFormatter.ofPattern("dd/MM/yyyy"));}
+    private void setReportPreset(int preset){YearMonth now=YearMonth.now();if(preset==0){reportFrom=now.atDay(1);reportTo=now.atEndOfMonth();}else if(preset==1){reportFrom=now.minusMonths(2).atDay(1);reportTo=now.atEndOfMonth();}else if(preset==2){reportFrom=LocalDate.of(now.getYear(),1,1);reportTo=LocalDate.of(now.getYear(),12,31);}}
+    private void chooseReportDate(boolean first){LocalDate date=first?reportFrom:reportTo;new DatePickerDialog(this,(picker,y,m,d)->{LocalDate chosen=LocalDate.of(y,m+1,d);if(first)reportFrom=chosen;else reportTo=chosen;allReportCategories=false;render();},date.getYear(),date.getMonthValue()-1,date.getDayOfMonth()).show();}
+    private void exportReport(FinanceReport report,int request,boolean share){
+        Runnable export=()->{
+            if(request==REPORT_PDF&&report.transactions.size()>FinanceReportPdf.MAX_TRANSACTIONS){message("O PDF aceita até 5.000 lançamentos. Reduza o período ou use Exportar CSV para todos os registros.");return;}
+            if(share){background(()->{File file=ReportShareProvider.newPdfFile(this);try{try(OutputStream output=new FileOutputStream(file)){FinanceReportPdf.write(report,output);}return ReportShareProvider.uriFor(this,file);}catch(Exception ex){file.delete();throw ex;}},uri->{
+                Intent send=new Intent(Intent.ACTION_SEND).setType("application/pdf").putExtra(Intent.EXTRA_STREAM,uri).addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);send.setClipData(ClipData.newRawUri("Relatório MyFinanceHub",uri));
+                try{startActivity(Intent.createChooser(send,"Compartilhar relatório"));}catch(android.content.ActivityNotFoundException ex){message("Nenhum aplicativo disponível para compartilhar PDF. Use Salvar PDF.");}
+            });}
+            else{pendingReport=new PendingReport(report,request);createDocument(request,request==REPORT_PDF?"application/pdf":"text/csv","MyFinanceHub-relatorio-"+report.from+"-a-"+report.to+(request==REPORT_PDF?".pdf":".csv"));}
+        };
+        if(hidden)new AlertDialog.Builder(this).setTitle("Exportar valores visíveis?").setMessage("O arquivo terá os valores completos mesmo com os números ocultos na tela. Ao compartilhar, você escolhe quem receberá o relatório.").setNegativeButton("Cancelar",null).setPositiveButton("Continuar",(d,w)->export.run()).show();else export.run();
+    }
+
     private void wallet(){
         eyebrow("PATRIMÔNIO E ORGANIZAÇÃO");title("Sua carteira");
+        action("Cotações e atualização","Pesquisar ativos e atualizar os valores dos investimentos.",()->startActivity(new Intent(this,QuotesActivity.class)));
+        if(quoteRefreshRunning)add(text("Atualizando cotações…",12,GREEN,true),0,0,0,12);
+        else if(!lastQuoteSummary.isEmpty())add(text(lastQuoteSummary,12,MUTED,false),0,0,0,12);
         section("Contas","Saldo local por conta");
         for(Models.Account a:store.accounts()){LinearLayout card=box(WHITE);LinearLayout line=row();line.addView(text(a.name,16,TEXT,true),new LinearLayout.LayoutParams(0,-2,1));line.addView(text(money(store.accountBalance(a.id)),17,GREEN,true));card.addView(line);
             addTo(card,text("Saldo inicial: "+money(a.openingCents)+"  ·  Toque para editar",12,MUTED,false),0,8,0,0);card.setOnClickListener(v->editAccount(a));add(card,0,0,0,10);}
@@ -222,14 +323,32 @@ public final class MainActivity extends Activity {
             addTo(card,text("Fecha dia "+c.closingDay+" · vence dia "+c.dueDay+" · editar",12,colors.heroMuted,false),0,8,0,0);card.setOnClickListener(v->editCard(c));add(card,0,0,0,12);}
         Button credit=button("+ Adicionar cartão",WHITE,GREEN);credit.setOnClickListener(v->editCard(null));add(credit,0,10,0,0);
         TextView creditNote=text("Crédito não reduz o saldo da conta. Registre o pagamento como saída com a forma “Pagamento de fatura”: ela reduz o saldo sem repetir as despesas do painel. Os valores acima são movimentos do mês civil, não uma fatura calculada.",12,MUTED,false);add(creditNote,0,10,0,0);
-        section("Investimentos","Posições cadastradas manualmente");long invested=0,current=0;
+        section("Investimentos","Carteira cadastrada no app");long invested=0,current=0;
         for(Models.Investment i:store.investments()){invested=Math.addExact(invested,i.investedCents);current=Math.addExact(current,i.currentCents);}
-        LinearLayout summary=box(colors.surfaceAlt);summary.addView(text("VALOR ATUAL",11,GREEN,true));addTo(summary,text(money(current),27,GREEN,true),0,8,0,6);summary.addView(text("Aplicado: "+money(invested)+"  ·  Variação: "+money(current-invested),12,GREEN,false));content.addView(summary);
+        LinearLayout summary=box(colors.surfaceAlt);summary.addView(text("TOTAL DOS INVESTIMENTOS CADASTRADOS",11,GREEN,true));addTo(summary,text(money(current),27,GREEN,true),0,8,0,6);summary.addView(text("Aplicado: "+money(invested)+"\nRentabilidade simples: "+money(current-invested)+" · "+returnPercent(invested,current),13,GREEN,false));content.addView(summary);
         for(Models.Investment i:store.investments()){LinearLayout card=box(WHITE);card.addView(text(i.name+(i.ticker.isEmpty()?"":" · "+i.ticker),15,TEXT,true));
-            addTo(card,text(i.kind+"  ·  Atual: "+money(i.currentCents),12,MUTED,false),0,7,0,0);card.setOnClickListener(v->editInvestment(i));add(card,0,10,0,0);}
+            addTo(card,text(i.kind+"  ·  Atual: "+money(i.currentCents),13,TEXT,false),0,7,0,0);
+            addTo(card,text("Rentabilidade simples: "+money(i.currentCents-i.investedCents)+" · "+returnPercent(i.investedCents,i.currentCents),13,i.currentCents<i.investedCents?RED:colors.income,true),0,7,0,0);
+            addTo(card,text(investmentQuoteLabel(i),12,MUTED,false),0,9,0,0);card.setContentDescription("Editar investimento "+i.name+", "+money(i.currentCents)+", rentabilidade simples "+returnPercent(i.investedCents,i.currentCents));card.setBackground(feedback(WHITE,20));card.setOnClickListener(v->editInvestment(i));add(card,0,10,0,0);}
         Button invest=button("+ Adicionar investimento",GREEN,colors.onPrimary);invest.setOnClickListener(v->editInvestment(null));add(invest,0,14,0,0);
-        add(text("Cadastro manual independente do saldo das contas. Aportes e resgates devem ser registrados também nos lançamentos.",12,MUTED,false),0,10,0,0);
+        add(text("O total é recalculado com os valores de cada investimento, incluindo cotações configuradas e valores manuais. A rentabilidade simples não representa retorno do período, não inclui proventos e não é anualizada. Aportes e resgates também precisam dos lançamentos na conta.",12,MUTED,false),0,10,0,0);
         b3Summary(true);
+    }
+
+    private String returnPercent(long invested,long current){if(hidden)return "••••%";if(invested==0)return "Percentual indisponível";return java.math.BigDecimal.valueOf(current).subtract(java.math.BigDecimal.valueOf(invested)).multiply(java.math.BigDecimal.valueOf(100)).divide(java.math.BigDecimal.valueOf(invested),2,java.math.RoundingMode.HALF_UP).toPlainString().replace('.',',')+"%";}
+    private String quoteTime(String time){try{return java.time.Instant.parse(time).atZone(java.time.ZoneId.systemDefault()).format(DateTimeFormatter.ofPattern("dd/MM/yyyy HH:mm"));}catch(java.time.DateTimeException ex){return "Horário indisponível";}}
+    private String investmentQuoteLabel(Models.Investment investment){return investment.quoteAt.isEmpty()?(investment.autoQuote?"Aguardando cotação · configure a atualização em Cotações":"Valor informado manualmente"):("brapi · cotação em "+quoteTime(investment.quoteAt)+(investment.autoQuote?" · atualização habilitada":" · atualização pausada"));}
+
+    private void estimatedB3(B3Portfolio.Snapshot snapshot){
+        if(snapshot==null)return;java.math.BigInteger total=java.math.BigInteger.ZERO;int count=0;java.time.Instant oldest=null;
+        for(B3Portfolio.Position position:snapshot.positions){if(!InvestmentQuoteUpdater.supportsB3Position(position))continue;InvestmentQuoteCache.Value quote=marketCache.get(position.ticker.trim().toUpperCase(Locale.ROOT));if(quote==null)continue;
+            try{java.math.BigDecimal quantity=new java.math.BigDecimal(position.quantity);if(quantity.signum()<=0)continue;java.math.BigInteger value=quantity.multiply(quote.price).movePointRight(2).setScale(0,java.math.RoundingMode.HALF_UP).toBigIntegerExact();total=total.add(value);count++;if(oldest==null||quote.asOf.isBefore(oldest))oldest=quote.asOf;}catch(ArithmeticException|NumberFormatException ignored){}}
+        if(count==0)return;
+        if(total.bitLength()>63){add(text("Estimativa B3 acima do limite suportado. Consulte as posições individuais.",12,MUTED,false),0,10,0,12);return;}final long cents=total.longValue();
+        LinearLayout estimate=box(WHITE);estimate.addView(text(count==snapshot.positions.size()?"B3 · ESTIMATIVA POR COTAÇÕES":"B3 · ESTIMATIVA PARCIAL POR COTAÇÕES",11,GREEN,true));
+        addTo(estimate,text(money(cents),26,TEXT,true),0,8,0,8);
+        estimate.addView(text(count+" de "+snapshot.positions.size()+" posições cotadas · brapi\nCotação mais antiga: "+quoteTime(oldest.toString()),12,MUTED,false));
+        addTo(estimate,text("Estimativa bruta com as quantidades importadas em "+b3Date(snapshot.asOfDate)+". Não inclui posições sem cotação nem mudanças posteriores de quantidade. O valor original do relatório B3 e o total dos cadastros ficam separados.",12,MUTED,false),0,10,0,0);add(estimate,0,0,0,12);
     }
 
     private void openB3(){page=6;render();}
@@ -244,7 +363,7 @@ public final class MainActivity extends Activity {
             card.addView(text(snapshot.unvaluedCount()>0?"VALOR INFORMADO · PARCIAL":"VALOR INFORMADO NO RELATÓRIO",11,GREEN,true));
             addTo(card,text(b3Total(snapshot),26,GREEN,true),0,8,0,6);
             card.addView(text(b3Count(snapshot.positions.size())+(snapshot.positions.size()==1?" importada":" importadas")+(snapshot.unvaluedCount()>0?" · "+snapshot.unvaluedCount()+" sem valor informado":""),12,MUTED,false));
-            add(card,0,0,0,10);}
+            add(card,0,0,0,10);estimatedB3(snapshot);}
         action(inWallet?"Abrir posição B3":"Posição B3",snapshot==null?"Importe o Excel da B3 e revise seus investimentos.":"Consultar ativos ou importar um relatório mais recente.",this::openB3);
         add(text("A posição B3 fica separada dos investimentos manuais e do saldo das contas, evitando contar o mesmo ativo duas vezes.",12,MUTED,false),0,0,0,0);
     }
@@ -259,7 +378,7 @@ public final class MainActivity extends Activity {
             LinearLayout summary=box(WHITE);summary.addView(text("POSIÇÃO EM "+b3Date(snapshot.asOfDate),12,GREEN,true));
             addTo(summary,text(b3Total(snapshot),30,TEXT,true),0,10,0,6);
             summary.addView(text(snapshot.unvaluedCount()>0?"Soma parcial: "+b3Count(snapshot.unvaluedCount())+" sem valor informado.":"Soma dos valores informados no relatório.",12,MUTED,false));
-            addTo(summary,text(b3Count(snapshot.positions.size())+" · custo de aquisição e rentabilidade não informados.",12,MUTED,false),0,10,0,0);add(summary,0,0,0,16);
+            addTo(summary,text(b3Count(snapshot.positions.size())+" · custo de aquisição e rentabilidade não informados.",12,MUTED,false),0,10,0,0);add(summary,0,0,0,16);estimatedB3(snapshot);
             EditText searchField=input("Buscar ativo ou instituição",b3Search,InputType.TYPE_CLASS_TEXT);content.addView(searchField);
             LinearLayout list=column();add(list,0,12,0,0);fillB3Positions(list,snapshot,b3Search);
             searchField.addTextChangedListener(new android.text.TextWatcher(){public void beforeTextChanged(CharSequence s,int a,int c,int f){}public void onTextChanged(CharSequence s,int st,int before,int count){b3Search=s.toString();visibleB3Positions=PAGE_SIZE;fillB3Positions(list,snapshot,b3Search);}public void afterTextChanged(android.text.Editable e){}});
@@ -278,7 +397,8 @@ public final class MainActivity extends Activity {
             if(!position.institution.isEmpty()||!position.kind.isEmpty())addTo(card,text(position.institution+(position.institution.isEmpty()||position.kind.isEmpty()?"":" · ")+position.kind,12,MUTED,false),0,6,0,0);
             addTo(card,text("Quantidade: "+b3Quantity(position.quantity),13,MUTED,false),0,12,0,4);
             card.addView(text(position.currentCents==null?"Valor não informado":money(position.currentCents),19,position.currentCents==null?MUTED:GREEN,true));
-            card.setContentDescription("Detalhes de "+position.product);card.setBackground(feedback(WHITE,20));card.setOnClickListener(v->b3PositionDetails(position,snapshot.asOfDate));addTo(list,card,0,0,0,10);
+            InvestmentQuoteCache.Value quote=InvestmentQuoteUpdater.supportsB3Position(position)?marketCache.get(position.ticker.trim().toUpperCase(Locale.ROOT)):null;if(quote!=null){try{long estimate=new java.math.BigDecimal(position.quantity).multiply(quote.price).movePointRight(2).setScale(0,java.math.RoundingMode.HALF_UP).longValueExact();addTo(card,text("Estimativa por cotação: "+money(estimate)+"\nbrapi · "+quoteTime(quote.asOf.toString()),12,MUTED,false),0,9,0,0);}catch(ArithmeticException|NumberFormatException ignored){}}
+            card.setContentDescription("Detalhes de "+position.product+", "+(position.currentCents==null?"valor não informado":money(position.currentCents)));card.setBackground(feedback(WHITE,20));card.setOnClickListener(v->b3PositionDetails(position,snapshot.asOfDate));addTo(list,card,0,0,0,10);
         }
         if(count==0){LinearLayout empty=box(WHITE);empty(empty,"Nenhuma posição encontrada","Tente outro ativo ou nome da instituição.");list.addView(empty);}
         if(count>visibleB3Positions){Button more=button("Mostrar mais ("+visibleB3Positions+" de "+count+")",WHITE,GREEN);more.setOnClickListener(v->{visibleB3Positions+=PAGE_SIZE;fillB3Positions(list,snapshot,query);});list.addView(more);}
@@ -302,18 +422,13 @@ public final class MainActivity extends Activity {
         action("Aparência",appearanceLabel(AppAppearance.getMode(this))+" · sua escolha fica salva neste aparelho.",this::chooseAppearance);
         section("Acesso rápido","Suas preferências e organização");
         action("Gerenciar categorias","Criar, buscar, editar ou excluir em uma tela própria.",()->{page=4;render();});
-        if(NOTIFICATIONS_ENABLED)action("Notificações de transações","XP, Itaú, Mercado Pago e Samsung Wallet · ativação opcional.",()->{page=5;render();});
-        else notificationFuture();
         section("Seus dados","Arquivos sob seu controle");
         action("Importar extrato CSV ou OFX","Escolha uma conta, revise e confirme os registros.",()->chooseDocument(IMPORT));
         action("Posição B3","Importar e consultar o relatório da Área do Investidor.",this::openB3);
         action("Exportar lançamentos em CSV","Para consultar em uma planilha.",()->createDocument(CSV,"text/csv","myfinancehub-lancamentos-"+LocalDate.now()+".csv"));
         action("Salvar backup completo","JSON sem criptografia. Guarde em local seguro.",()->createDocument(BACKUP,"application/json","myfinancehub-backup-"+LocalDate.now()+".json"));
         action("Restaurar backup","Substitui os dados locais após confirmação.",()->new AlertDialog.Builder(this).setTitle("Restaurar um backup?").setMessage("O arquivo válido substituirá todos os dados atuais. Antes, salve um backup do estado atual. Use apenas um arquivo JSON exportado pelo MyFinanceHub.").setNegativeButton("Cancelar",null).setPositiveButton("Escolher arquivo",(d,w)->chooseDocument(RESTORE)).show());
-        section("Próximas etapas","Módulos ainda não disponíveis");LinearLayout future=box(colors.surfaceAlt);
-        future.addView(text("1  Open Finance, PIX e carteiras",14,GREEN,true));addTo(future,text("Conexões diretas com bancos e carteiras dependem das APIs e das permissões de cada serviço."+(NOTIFICATIONS_ENABLED?" A leitura opcional de notificações funciona localmente.":" Nesta versão, use os registros manuais e a importação de extratos."),12,GREEN,false),0,7,0,16);
-        future.addView(text("2  Atualização automática da B3",14,GREEN,true));addTo(future,text("A API direta exige acesso empresarial autorizado. A importação de relatórios já está disponível em Carteira → Abrir posição B3.",12,GREEN,false),0,7,0,0);content.addView(future);
-        add(text("MyFinanceHub · versão "+appVersion()+"\nDados no armazenamento privado do app. Sem anúncios, rastreamento ou acesso à internet. Desinstalar o aplicativo apaga os dados locais; exporte um backup antes.",12,MUTED,false),0,22,0,0);
+        add(text("MyFinanceHub · versão "+appVersion()+"\nSeus dados financeiros ficam no armazenamento privado do app. Cotações opcionais consultam códigos de ativos pela internet. Sem anúncios ou rastreamento. Desinstalar apaga os dados locais; exporte um backup antes.",12,MUTED,false),0,22,0,0);
     }
     private String appearanceLabel(AppAppearance.Mode mode){return mode==AppAppearance.Mode.LIGHT?"Claro":mode==AppAppearance.Mode.DARK?"Escuro":"Seguir o sistema";}
     private void chooseAppearance(){
@@ -362,104 +477,33 @@ public final class MainActivity extends Activity {
         }catch(Exception ex){message(safeError(ex));}}));dialog.show();
     }
 
-    private void notificationFuture(){
-        LinearLayout future=box(colors.surfaceAlt);future.addView(text("Leitura de notificações",15,GREEN,true));
-        addTo(future,text("Módulo futuro. Nesta versão, organize seus dados com lançamentos manuais e importação de extratos CSV ou OFX.",12,GREEN,false),0,7,0,0);content.addView(future);
-    }
-    private void notifications(){
-        if(!NOTIFICATIONS_ENABLED){eyebrow("MÓDULO FUTURO");title("Notificações");notificationFuture();return;}
-        eyebrow("LEITURA OPCIONAL E LOCAL");title("Notificações");
-        add(text("Alertas reconhecidos viram sugestões. Você confere os dados e escolhe se deseja salvar cada lançamento.",13,MUTED,false),0,8,0,16);
-        boolean access=NotificationCaptureService.hasAccess(this);Set<String> packages=notificationInbox.allowedPackages();
-        LinearLayout status=box(colors.hero);status.addView(text(notificationInbox.isEnabled()&&access&&!packages.isEmpty()?"CAPTURA ATIVA":"CAPTURA PAUSADA",12,LIME,true));
-        addTo(status,text("Somente os apps escolhidos. Nenhum lançamento é salvo automaticamente.",12,colors.heroText,false),0,8,0,0);content.addView(status);
-        section("Começar","XP, Itaú, Mercado Pago e Samsung Wallet");
-        action("1. Escolher apps",packages.size()+" apps selecionados. Escolha apenas os que deseja acompanhar.",this::chooseNotificationApps);
-        action("2. Permitir acesso no Android",access?"Acesso concedido · toque para gerenciar.":"O Android solicitará sua autorização para ler notificações.",this::explainNotificationAccess);
-        Switch enabled=new Switch(this);enabled.setText(getString(R.string.capture_new_notifications));enabled.setTextColor(TEXT);enabled.setContentDescription("Capturar novas notificações");enabled.setPadding(0,dp(12),0,dp(12));enabled.setChecked(notificationInbox.isEnabled());enabled.setEnabled(notificationInbox.isEnabled()||access&&!packages.isEmpty());
-        enabled.setOnCheckedChangeListener((v,value)->{notificationInbox.setEnabled(value);render();});content.addView(enabled);
-        if(!access||packages.isEmpty())add(text("Escolha os apps e conceda o acesso antes de ligar a captura. Você pode continuar usando todo o controle manual e a importação de extratos.",12,MUTED,false),0,0,0,8);
-        Button refresh=button("Atualizar lista",WHITE,GREEN);refresh.setOnClickListener(v->render());add(refresh,0,12,0,0);
-        List<NotificationInbox.Candidate> pending=notificationInbox.pending();for(Iterator<NotificationInbox.Candidate> i=pending.iterator();i.hasNext();){NotificationInbox.Candidate candidate=i.next();if(store.hasNotificationSource(candidate.sourceKey)){notificationInbox.dismiss(candidate.id);i.remove();}}
-        section("Para revisar ("+pending.size()+")","Revise conta, valor, data, categoria e cartão");
-        if(pending.isEmpty()){LinearLayout empty=box(WHITE);empty(empty,"Nenhuma sugestão pendente","Depois de ativar, novos alertas financeiros compatíveis dos apps escolhidos aparecerão aqui. Não buscamos notificações antigas.");content.addView(empty);}
-        int shown=0;
-        for(NotificationInbox.Candidate candidate:pending){
-            LinearLayout card=box(WHITE);card.addView(text(candidate.appLabel+" · "+displayDate(candidate.date),12,MUTED,true));
-            addTo(card,text(candidate.description,16,TEXT,true),0,8,0,0);addTo(card,text((candidate.type.equals("income")?"+ ":"− ")+money(candidate.amountCents),21,candidate.type.equals("income")?GREEN:TEXT,true),0,8,0,0);
-            if(!candidate.lastFour.isEmpty())addTo(card,text("Cartão informado: final "+candidate.lastFour,12,MUTED,false),0,6,0,0);
-            LinearLayout actions=row();Button review=button("Revisar",GREEN,colors.onPrimary);review.setContentDescription("Revisar notificação "+candidate.id);review.setOnClickListener(v->reviewNotification(candidate));
-            Button dismiss=button("Descartar",WHITE,MUTED);dismiss.setContentDescription("Descartar notificação "+candidate.id);dismiss.setOnClickListener(v->{notificationInbox.dismiss(candidate.id);render();});
-            actions.addView(review,new LinearLayout.LayoutParams(0,-2,1));actions.addView(dismiss,new LinearLayout.LayoutParams(0,-2,1));addTo(card,actions,0,14,0,0);add(card,0,0,0,12);shown++;
-        }
-        add(text("O formato dos alertas varia por app e Android. Alertas ambíguos, ofertas, códigos de acesso e valores de saldo não são registrados. A data sugerida é a data do alerta: confira-a. Compras podem exigir escolher crédito ou débito. Sugestões ficam por até 30 dias (máximo 100).",12,MUTED,false),0,15,0,0);
-        if(shown>0){Button clear=button("Descartar todas as sugestões",WHITE,RED);clear.setOnClickListener(v->new AlertDialog.Builder(this).setTitle("Descartar sugestões?").setMessage("Seus lançamentos já salvos serão preservados.").setNegativeButton("Cancelar",null).setPositiveButton("Descartar",(d,w)->{notificationInbox.clearPending();render();}).show());add(clear,0,12,0,0);}
-        add(text("O backup JSON guarda os lançamentos confirmados. Sugestões e preferências de captura não entram no backup; após restaurar em outro aparelho, configure a captura novamente.",12,MUTED,false),0,15,0,0);
-    }
-    private void explainNotificationAccess(){
-        if(!NOTIFICATIONS_ENABLED)return;
-        new AlertDialog.Builder(this).setTitle("Acesso às notificações")
-            .setMessage("O Android concede um acesso amplo às notificações, que podem conter mensagens e códigos pessoais. O MyFinanceHub filtra os apps que você escolher e só guarda dados resumidos de alertas financeiros reconhecidos, sem enviar nada pela internet. Você pode pausar a captura aqui ou revogar o acesso no Android.")
-            .setNegativeButton("Cancelar",null).setPositiveButton("Abrir configurações",(d,w)->{try{startActivity(NotificationCaptureService.accessSettingsIntent(this));}catch(android.content.ActivityNotFoundException ex){message("O acesso a notificações não está disponível neste aparelho.");}}).show();
-    }
-    // Only the notifications flavor reaches this method and declares the launcher query.
-    @android.annotation.SuppressLint("QueryPermissionsNeeded")
-    private void chooseNotificationApps(){
-        if(!NOTIFICATIONS_ENABLED)return;
-        android.content.pm.PackageManager manager=getPackageManager();Intent launcher=new Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LAUNCHER);
-        LinkedHashMap<String,String> available=new LinkedHashMap<>();
-        for(android.content.pm.ResolveInfo info:manager.queryIntentActivities(launcher,0))if(info.activityInfo!=null&&!getPackageName().equals(info.activityInfo.packageName))available.put(info.activityInfo.packageName,info.loadLabel(manager).toString());
-        Set<String> selectedPackages=new HashSet<>(notificationInbox.allowedPackages());for(String selected:selectedPackages)if(!available.containsKey(selected))available.put(selected,selected+" (não encontrado)");
-        ArrayList<Map.Entry<String,String>> apps=new ArrayList<>(available.entrySet());apps.sort((a,b)->{int first=Integer.compare(preferredApp(b.getValue())?1:0,preferredApp(a.getValue())?1:0);return first!=0?first:a.getValue().compareToIgnoreCase(b.getValue());});
-        if(apps.isEmpty()){message("Nenhum app foi encontrado. Instale ou habilite o aplicativo do banco ou carteira e tente novamente.");return;}
-        String[] names=new String[apps.size()];boolean[] checked=new boolean[apps.size()];for(int i=0;i<apps.size();i++){names[i]=apps.get(i).getValue();checked[i]=selectedPackages.contains(apps.get(i).getKey());}
-        new AlertDialog.Builder(this).setTitle("Apps para acompanhar").setMultiChoiceItems(names,checked,(d,index,value)->{if(value)selectedPackages.add(apps.get(index).getKey());else selectedPackages.remove(apps.get(index).getKey());})
-            .setNegativeButton("Cancelar",null).setPositiveButton("Salvar seleção",(d,w)->{notificationInbox.setAllowedPackages(selectedPackages);if(selectedPackages.isEmpty())notificationInbox.setEnabled(false);render();}).show();
-    }
-    private boolean preferredApp(String label){String normalized=normalize(label);return normalized.equals("xp")||normalized.startsWith("xp ")||normalized.contains("itau")||normalized.contains("mercado pago")||normalized.contains("samsung wallet")||normalized.contains("samsung pay");}
-    private void reviewNotification(NotificationInbox.Candidate candidate){
-        if(!NOTIFICATIONS_ENABLED)return;
-        if(store.hasNotificationSource(candidate.sourceKey)){notificationInbox.dismiss(candidate.id);render();message("Esta notificação já foi registrada.");return;}
-        Models.Entry entry=new Models.Entry();entry.description=candidate.description;entry.date=candidate.date;entry.type=candidate.type;entry.method=candidate.method;entry.amountCents=candidate.amountCents;entry.sourceKey=candidate.sourceKey;
-        // Choosing the account remains an explicit step; only a unique last-four match is suggested.
-        int matches=0;for(Models.Card card:store.cards())if(!candidate.lastFour.isEmpty()&&card.lastFour.equals(candidate.lastFour)){entry.cardId=card.id;matches++;}if(matches!=1)entry.cardId=0;
-        entry.accountId=0;
-        boolean possibleDuplicate=false;for(Models.Entry saved:store.entries())if(saved.date.equals(entry.date)&&saved.type.equals(entry.type)&&saved.amountCents==entry.amountCents){possibleDuplicate=true;break;}
-        String warning=candidate.reviewNote+(candidate.lastFour.isEmpty()?"":" Cartão informado: final "+candidate.lastFour+".")+(possibleDuplicate?" Já existe um lançamento com a mesma data, tipo e valor: confira se é uma duplicata de extrato ou de outro alerta.":"");
-        new AlertDialog.Builder(this).setTitle("Revisar sugestão de "+candidate.appLabel).setMessage(warning).setNegativeButton("Cancelar",null).setPositiveButton("Conferir dados",(d,w)->editEntry(entry,()->notificationInbox.dismiss(candidate.id),candidate.method.equals("other"))).show();
-    }
-
-    private void editEntry(Models.Entry original){editEntry(original,null,false);}
-    private void editEntry(Models.Entry original,Runnable afterSave,boolean chooseMethod){
+    private void editEntry(Models.Entry original){
         Models.Entry e=original==null?new Models.Entry():original;LinearLayout form=form();
         EditText description=field(form,"Descrição",e.description==null?"":e.description,InputType.TYPE_CLASS_TEXT|InputType.TYPE_TEXT_FLAG_CAP_SENTENCES);
         EditText amount=field(form,"Valor (R$)",e.amountCents==0?"":decimal(e.amountCents),InputType.TYPE_CLASS_NUMBER|InputType.TYPE_NUMBER_FLAG_DECIMAL);
         Spinner type=select(form,"Tipo",new String[]{"Saída","Entrada"},"income".equals(e.type)?1:0);
         EditText date=field(form,"Data",e.date==null||e.date.isEmpty()?LocalDate.now().toString():e.date,InputType.TYPE_NULL);date.setFocusable(false);date.setOnClickListener(v->{LocalDate day=LocalDate.parse(date.getText());new DatePickerDialog(this,(p,y,m,d)->date.setText(LocalDate.of(y,m+1,d).toString()),day.getYear(),day.getMonthValue()-1,day.getDayOfMonth()).show();});
         List<Models.Account> accounts=store.accounts();if(accounts.isEmpty()){message("Adicione uma conta antes de lançar movimentações.");return;}
-        boolean notificationReview=e.id==0&&e.sourceKey!=null&&e.sourceKey.startsWith("notification:");
-        String[] accountOptions=accountNames(accounts);if(notificationReview){String[] explicit=new String[accountOptions.length+1];explicit[0]="Escolha uma conta";System.arraycopy(accountOptions,0,explicit,1,accountOptions.length);accountOptions=explicit;}
-        Spinner account=select(form,"Conta",accountOptions,notificationReview?0:indexAccount(accounts,e.accountId));
+        Spinner account=select(form,"Conta",accountNames(accounts),indexAccount(accounts,e.accountId));
         List<Models.Category> categories=store.categories();Spinner category=select(form,"Categoria",new String[]{"Sem categoria"},0);List<Models.Category> available=new ArrayList<>();long[] preferredCategory={e.categoryId};
         Runnable updateCategories=()->{available.clear();String direction=type.getSelectedItemPosition()==1?"income":"expense";ArrayList<String> labels=new ArrayList<>();labels.add("Sem categoria");int selected=0;
             for(Models.Category c:categories)if(c.type.equals("both")||c.type.equals(direction)){available.add(c);labels.add(c.name);if(c.id==preferredCategory[0])selected=available.size();}
             setItems(category,labels.toArray(new String[0]),selected);};
         type.setOnItemSelectedListener(selected(updateCategories));updateCategories.run();
         Button newCategory=button("+ Nova categoria",colors.surfaceAlt,GREEN);newCategory.setOnClickListener(v->quickCategory(type.getSelectedItemPosition()==1?"income":"expense",created->{preferredCategory[0]=created.id;categories.clear();categories.addAll(store.categories());updateCategories.run();}));form.addView(newCategory);
-        String[] methodOptions=METHOD_NAMES;if(chooseMethod){String[] explicit=new String[METHOD_NAMES.length+1];explicit[0]="Escolha a forma de pagamento";System.arraycopy(METHOD_NAMES,0,explicit,1,METHOD_NAMES.length);methodOptions=explicit;}
-        Spinner method=select(form,"Forma de pagamento",methodOptions,chooseMethod?0:indexOf(METHOD_KEYS,e.method));
+        Spinner method=select(form,"Forma de pagamento",METHOD_NAMES,indexOf(METHOD_KEYS,e.method));
         List<Models.Card> cards=store.cards();ArrayList<String> cardLabels=new ArrayList<>();cardLabels.add("Selecione um cartão");int selectedCard=0;
         for(Models.Card c:cards){cardLabels.add(c.name+" · "+c.lastFour);if(c.id==e.cardId)selectedCard=cardLabels.size()-1;}
         Spinner card=select(form,"Cartão (somente para crédito)",cardLabels.toArray(new String[0]),selectedCard);
         TextView hint=text("PIX é identificado manualmente. Compras no crédito não alteram o saldo da conta. Para quitar o cartão, use uma saída com a forma “Pagamento de fatura”.",12,MUTED,false);form.addView(hint);
         dialog(original==null||e.id==0?"Novo lançamento":"Editar lançamento",form,()->{
             Models.Entry updated=new Models.Entry();updated.id=e.id;updated.description=description.getText().toString().trim();updated.amountCents=Money.parseCents(amount.getText().toString());
-            updated.type=type.getSelectedItemPosition()==1?"income":"expense";updated.date=date.getText().toString();int selectedAccount=account.getSelectedItemPosition()-(notificationReview?1:0);if(selectedAccount<0)throw new IllegalArgumentException("Escolha a conta deste lançamento antes de salvar.");updated.accountId=accounts.get(selectedAccount).id;
+            updated.type=type.getSelectedItemPosition()==1?"income":"expense";updated.date=date.getText().toString();int selectedAccount=account.getSelectedItemPosition();updated.accountId=accounts.get(selectedAccount).id;
             updated.categoryId=category.getSelectedItemPosition()==0?0:available.get(category.getSelectedItemPosition()-1).id;
-            int selectedMethod=method.getSelectedItemPosition()-(chooseMethod?1:0);if(selectedMethod<0)throw new IllegalArgumentException("Escolha a forma de pagamento. Confira se foi crédito ou débito.");updated.method=METHOD_KEYS[selectedMethod];updated.cardId=updated.method.equals("credit")&&card.getSelectedItemPosition()>0?cards.get(card.getSelectedItemPosition()-1).id:0;
+            int selectedMethod=method.getSelectedItemPosition();if(selectedMethod<0)throw new IllegalArgumentException("Escolha a forma de pagamento. Confira se foi crédito ou débito.");updated.method=METHOD_KEYS[selectedMethod];updated.cardId=updated.method.equals("credit")&&card.getSelectedItemPosition()>0?cards.get(card.getSelectedItemPosition()-1).id:0;
             if(updated.method.equals("credit")&&updated.cardId==0)throw new IllegalArgumentException("Selecione um cartão cadastrado para lançar no crédito.");
             if(updated.method.equals("card_payment")&&updated.type.equals("income"))throw new IllegalArgumentException("O pagamento de fatura deve ser uma saída.");
-            updated.sourceKey=e.sourceKey;if(updated.id==0&&updated.sourceKey!=null&&updated.sourceKey.startsWith("notification:"))store.saveReviewedNotification(updated);else store.saveEntry(updated);month=YearMonth.from(LocalDate.parse(updated.date));if(afterSave!=null)afterSave.run();},original==null||e.id==0?null:()->confirmDelete("Excluir este lançamento?",()->store.deleteEntry(e.id)));
+            updated.sourceKey=e.sourceKey;store.saveEntry(updated);month=YearMonth.from(LocalDate.parse(updated.date));},original==null||e.id==0?null:()->confirmDelete("Excluir este lançamento?",()->store.deleteEntry(e.id)));
     }
 
     private void editCategory(Models.Category old){LinearLayout form=form();EditText name=field(form,"Nome",old==null?"":old.name,InputType.TYPE_CLASS_TEXT|InputType.TYPE_TEXT_FLAG_CAP_SENTENCES);
@@ -479,16 +523,29 @@ public final class MainActivity extends Activity {
     private void editInvestment(Models.Investment old){LinearLayout form=form();EditText name=field(form,"Nome do investimento",old==null?"":old.name,InputType.TYPE_CLASS_TEXT);
         EditText ticker=field(form,"Código / ticker (opcional)",old==null?"":old.ticker,InputType.TYPE_CLASS_TEXT|InputType.TYPE_TEXT_FLAG_CAP_CHARACTERS);
         EditText kind=field(form,"Tipo (ex.: CDB, ação, Tesouro)",old==null?"":old.kind,InputType.TYPE_CLASS_TEXT);
+        EditText quantity=field(form,"Quantidade (opcional)",old==null?"":old.quantity.replace('.',','),InputType.TYPE_CLASS_NUMBER|InputType.TYPE_NUMBER_FLAG_DECIMAL);
         EditText invested=field(form,"Total aplicado (R$)",old==null?"":decimal(old.investedCents),InputType.TYPE_CLASS_NUMBER|InputType.TYPE_NUMBER_FLAG_DECIMAL);
         EditText current=field(form,"Valor atual (R$)",old==null?"":decimal(old.currentCents),InputType.TYPE_CLASS_NUMBER|InputType.TYPE_NUMBER_FLAG_DECIMAL);
-        dialog(old==null?"Novo investimento":"Editar investimento",form,()->{Models.Investment i=new Models.Investment();i.id=old==null?0:old.id;i.name=name.getText().toString().trim();i.ticker=ticker.getText().toString().trim();i.kind=kind.getText().toString().trim();i.investedCents=Money.parseCents(invested.getText().toString());i.currentCents=Money.parseCents(current.getText().toString());store.saveInvestment(i);},old==null?null:()->confirmDelete("Excluir este investimento?",()->store.deleteInvestment(old.id)));}
+        CheckBox automatic=new CheckBox(this);automatic.setText(R.string.quote_auto_position);automatic.setTextColor(TEXT);automatic.setContentDescription(getString(R.string.quote_auto_position));automatic.setMinHeight(dp(48));automatic.setChecked(old!=null&&old.autoQuote);addTo(form,automatic,0,12,0,8);
+        form.addView(text("Informe o ticker e a quantidade, por exemplo PETR4 e 10, ou BTC-BRL e 0,01. A cotação recalcula quantidade × preço; o total aplicado permanece como custo. Configure a fonte e a atualização em Carteira → Cotações e atualização. Ativos sem cotação suportada continuam manuais.",12,MUTED,false));
+        dialog(old==null?"Novo investimento":"Editar investimento",form,()->{
+            Models.Investment i=new Models.Investment();i.id=old==null?0:old.id;i.name=name.getText().toString().trim();i.ticker=ticker.getText().toString().trim().toUpperCase(Locale.ROOT);i.kind=kind.getText().toString().trim();
+            String exact=quantity.getText().toString().trim().replace(',','.');if(!exact.isEmpty()&&!exact.matches("[0-9]{1,24}(\\.[0-9]{1,8})?"))throw new IllegalArgumentException("Informe a quantidade sem separador de milhares, com até 8 casas decimais.");
+            i.quantity=exact.isEmpty()?"":new java.math.BigDecimal(exact).stripTrailingZeros().toPlainString();i.autoQuote=automatic.isChecked();i.investedCents=invested.getText().toString().trim().isEmpty()?0:Money.parseCents(invested.getText().toString());i.currentCents=current.getText().toString().trim().isEmpty()?0:Money.parseCents(current.getText().toString());
+            synchronized(store){if(old!=null&&i.ticker.equals(old.ticker)&&i.quantity.equals(old.quantity)&&i.currentCents==old.currentCents){for(Models.Investment fresh:store.investments())if(fresh.id==old.id&&fresh.ticker.equals(i.ticker)&&fresh.quantity.equals(i.quantity)){i.currentCents=fresh.currentCents;i.quotePrice=fresh.quotePrice;i.quoteAt=fresh.quoteAt;i.quoteSource=fresh.quoteSource;break;}}
+                store.saveInvestment(i);}
+        },old==null?null:()->confirmDelete("Excluir este investimento?",()->store.deleteInvestment(old.id)));}
 
     private void chooseDocument(int code){Intent intent=new Intent(Intent.ACTION_OPEN_DOCUMENT);intent.addCategory(Intent.CATEGORY_OPENABLE);intent.setType("*/*");
         if(code==B3_IMPORT)intent.putExtra(Intent.EXTRA_MIME_TYPES,new String[]{"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet","text/csv","text/comma-separated-values","application/octet-stream"});
         try{startActivityForResult(intent,code);}catch(android.content.ActivityNotFoundException ex){message("Nenhum seletor de arquivos disponível neste dispositivo.");}}
     private void createDocument(int code,String mime,String name){Intent intent=new Intent(Intent.ACTION_CREATE_DOCUMENT);intent.addCategory(Intent.CATEGORY_OPENABLE);intent.setType(mime);intent.putExtra(Intent.EXTRA_TITLE,name);
         try{startActivityForResult(intent,code);}catch(android.content.ActivityNotFoundException ex){message("Nenhum seletor de arquivos disponível neste dispositivo.");}}
-    @Override protected void onActivityResult(int request,int result,Intent data){super.onActivityResult(request,result,data);if(result!=RESULT_OK||data==null||data.getData()==null)return;Uri uri=data.getData();
+    @Override protected void onActivityResult(int request,int result,Intent data){super.onActivityResult(request,result,data);
+        if(request==REPORT_PDF||request==REPORT_CSV){PendingReport saved=pendingReport;pendingReport=null;if(result!=RESULT_OK||data==null||data.getData()==null)return;
+            if(saved==null||saved.request!=request){message("O pedido de exportação foi interrompido. Volte a Relatórios e gere o arquivo novamente.");return;}
+            Uri destination=data.getData();background(()->{try(OutputStream output=getContentResolver().openOutputStream(destination,"wt")){if(output==null)throw new IOException("Não foi possível abrir o destino.");if(request==REPORT_PDF)FinanceReportPdf.write(saved.report,output);else output.write(saved.report.toCsv().getBytes(StandardCharsets.UTF_8));}return "Relatório salvo.";},this::message);return;}
+        if(result!=RESULT_OK||data==null||data.getData()==null)return;Uri uri=data.getData();
         if(request==IMPORT||request==RESTORE){background(()->readDocument(uri),text->{if(request==IMPORT)importOptions(text,fileName(uri));else restorePreview(text);});}
         else if(request==B3_IMPORT){background(()->{byte[] bytes=readDocumentBytes(uri);B3PositionImporter.Report report=B3PositionImporter.parse(bytes,fileName(uri));return new B3ImportResult(report,sha256(bytes));},value->b3Preview(value.report,value.hash));}
         else if(request==BACKUP||request==CSV){background(()->{String text=request==BACKUP?store.exportBackup():store.exportCsv();try(OutputStream out=getContentResolver().openOutputStream(uri,"wt")){if(out==null)throw new IOException("Não foi possível abrir o destino.");out.write(text.getBytes(StandardCharsets.UTF_8));}return "Arquivo salvo. Guarde-o em local seguro.";},this::message);}}
@@ -581,7 +638,7 @@ public final class MainActivity extends Activity {
     private void entryRow(LinearLayout parent,Models.Entry e){LinearLayout line=row();line.setPadding(0,dp(13),0,dp(13));TextView icon=text(e.type.equals("income")?"↗":"↘",21,e.type.equals("income")?GREEN:RED,true);icon.setGravity(Gravity.CENTER);icon.setBackground(round(e.type.equals("income")?colors.incomeSurface:colors.expenseSurface,13));line.addView(icon,new LinearLayout.LayoutParams(dp(39),dp(41)));
         LinearLayout description=column();TextView label=text(e.description,14,TEXT,true);label.setMaxLines(2);description.addView(label);String details=displayDate(e.date)+" · "+categoryName(e.categoryId)+"\n"+(e.method.equals("credit")?cardName(e.cardId):accountName(e.accountId))+" · "+methodName(e.method);
         addTo(description,text(details,12,MUTED,false),0,4,0,0);LinearLayout.LayoutParams lp=new LinearLayout.LayoutParams(0,-2,1);lp.setMargins(dp(10),0,dp(8),0);line.addView(description,lp);
-        TextView amount=text((e.type.equals("income")?"+ ":"− ")+money(e.amountCents),13,e.type.equals("income")?GREEN:TEXT,true);line.addView(amount);line.setContentDescription(e.description+", "+details);line.setBackground(feedback(WHITE,10));line.setOnClickListener(v->editEntry(e));parent.addView(line);divider(parent);}
+        TextView amount=text((e.type.equals("income")?"+ ":"− ")+money(e.amountCents),13,e.type.equals("income")?GREEN:TEXT,true);line.addView(amount);line.setContentDescription(e.description+", "+details+", "+(e.type.equals("income")?"entrada ":"saída ")+money(e.amountCents));line.setBackground(feedback(WHITE,10));line.setOnClickListener(v->editEntry(e));parent.addView(line);divider(parent);}
     private void monthSelector(){LinearLayout row=row();row.setGravity(Gravity.CENTER_VERTICAL);row.setPadding(0,dp(12),0,dp(12));Button back=button("‹",BG,GREEN);back.setContentDescription("Mês anterior");back.setOnClickListener(v->{month=month.minusMonths(1);render();});row.addView(back,new LinearLayout.LayoutParams(dp(48),dp(48)));
         TextView monthLabel=text(month.format(DateTimeFormatter.ofPattern("MMMM 'de' yyyy",new Locale("pt","BR"))),14,TEXT,true);monthLabel.setGravity(Gravity.CENTER);row.addView(monthLabel,new LinearLayout.LayoutParams(0,-2,1));Button next=button("›",BG,GREEN);next.setContentDescription("Próximo mês");next.setOnClickListener(v->{month=month.plusMonths(1);render();});row.addView(next,new LinearLayout.LayoutParams(dp(48),dp(48)));content.addView(row);}
     private LinearLayout metric(String label,long value,int color){LinearLayout card=box(WHITE);card.addView(text(label,12,color,true));addTo(card,text(money(value),20,TEXT,true),0,12,0,0);return card;}
@@ -616,6 +673,7 @@ public final class MainActivity extends Activity {
             if(kind==0){c.drawRoundRect(3,3,10,10,2,2,paint);c.drawRoundRect(14,3,21,10,2,2,paint);c.drawRoundRect(3,14,10,21,2,2,paint);c.drawRoundRect(14,14,21,21,2,2,paint);}
             else if(kind==1){c.drawLine(5,5,19,5,paint);c.drawLine(5,12,19,12,paint);c.drawLine(5,19,15,19,paint);}
             else if(kind==2){c.drawRoundRect(2,5,22,20,3,3,paint);c.drawRoundRect(15,10,22,16,2,2,paint);c.drawCircle(18,13,.8f,paint);}
+            else if(kind==7){c.drawLine(4,20,4,5,paint);c.drawLine(4,20,21,20,paint);c.drawLine(9,16,9,11,paint);c.drawLine(14,16,14,6,paint);c.drawLine(19,16,19,3,paint);}
             else if(kind==4){c.drawCircle(6,6,3,paint);c.drawCircle(18,6,3,paint);c.drawCircle(6,18,3,paint);c.drawCircle(18,18,3,paint);}
             else{c.drawCircle(12,12,5,paint);for(int i=0;i<8;i++){double a=Math.PI*i/4;c.drawLine(12+(float)Math.cos(a)*8,12+(float)Math.sin(a)*8,12+(float)Math.cos(a)*10,12+(float)Math.sin(a)*10,paint);}}c.restore();}
     }

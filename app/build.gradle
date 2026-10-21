@@ -10,26 +10,13 @@ android {
         applicationId 'br.com.myfinancehub'
         minSdk 26
         targetSdk 35
-        versionCode 6
-        versionName '0.4.0'
+        versionCode 7
+        versionName '0.5.0'
         testInstrumentationRunner 'android.test.InstrumentationTestRunner'
     }
 
     buildFeatures {
         buildConfig true
-    }
-
-    flavorDimensions 'mode'
-    productFlavors {
-        // The documented default APK is local; notifications is an explicit optional build.
-        local {
-            dimension 'mode'
-            buildConfigField 'boolean', 'NOTIFICATION_CAPTURE_ENABLED', 'false'
-        }
-        notifications {
-            dimension 'mode'
-            buildConfigField 'boolean', 'NOTIFICATION_CAPTURE_ENABLED', 'true'
-        }
     }
 
     buildTypes {

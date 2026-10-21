@@ -1,0 +1,234 @@
+{
+  "version": "0.5.0",
+  "versionCode": 7,
+  "package": "br.com.myfinancehub",
+  "date": "2026-10-21",
+  "apk": {
+    "path": "artifacts/MyFinanceHub-0.5.0-debug.apk",
+    "bytes": 317022,
+    "sha256": "8d045e80c49e7855b1d59de261cdf1edb8bf43cc0bae8765a70c88c00efa852b",
+    "certificateSha256": "3aed65b8149ccd92287cc1055b57a5ae6b909f12d9282ffab221c24a8dadb446",
+    "signatureVerified": true,
+    "zipAlignmentVerified": true,
+    "minSdk": 26,
+    "targetSdk": 35,
+    "permissions": [
+      "android.permission.INTERNET"
+    ]
+  },
+  "android": {
+    "command": "./scripts/verify.sh",
+    "passed": true,
+    "tests": 240,
+    "failures": 0,
+    "errors": 0,
+    "skipped": 0,
+    "lint": "No issues found.",
+    "suites": [
+      {
+        "name": "br.com.myfinancehub.AppAppearanceTest",
+        "tests": 4,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      },
+      {
+        "name": "br.com.myfinancehub.B3ActivityTest",
+        "tests": 11,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      },
+      {
+        "name": "br.com.myfinancehub.B3PositionImporterTest",
+        "tests": 19,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      },
+      {
+        "name": "br.com.myfinancehub.B3StoreTest",
+        "tests": 15,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      },
+      {
+        "name": "br.com.myfinancehub.FinanceReportPdfTest",
+        "tests": 8,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      },
+      {
+        "name": "br.com.myfinancehub.FinanceReportTest",
+        "tests": 21,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      },
+      {
+        "name": "br.com.myfinancehub.FinanceStoreTest",
+        "tests": 23,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      },
+      {
+        "name": "br.com.myfinancehub.InvestmentQuoteCacheTest",
+        "tests": 10,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      },
+      {
+        "name": "br.com.myfinancehub.InvestmentQuoteStoreTest",
+        "tests": 17,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      },
+      {
+        "name": "br.com.myfinancehub.InvestmentQuoteUpdaterTest",
+        "tests": 10,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      },
+      {
+        "name": "br.com.myfinancehub.InvestmentQuotesTest",
+        "tests": 22,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      },
+      {
+        "name": "br.com.myfinancehub.LocalBuildTest",
+        "tests": 3,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      },
+      {
+        "name": "br.com.myfinancehub.MainActivityTest",
+        "tests": 18,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      },
+      {
+        "name": "br.com.myfinancehub.MoneyTest",
+        "tests": 4,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      },
+      {
+        "name": "br.com.myfinancehub.ReportActivityTest",
+        "tests": 9,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      },
+      {
+        "name": "br.com.myfinancehub.ReportShareProviderTest",
+        "tests": 10,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      },
+      {
+        "name": "br.com.myfinancehub.StatementImporterTest",
+        "tests": 36,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      }
+    ]
+  },
+  "emulator": {
+    "api": 35,
+    "upgradeInstall": "adb install -r: Success",
+    "migration": {
+      "beforeSchema": 2,
+      "afterSchema": 3,
+      "legacyTablesUnchanged": {
+        "accounts": true,
+        "android_metadata": true,
+        "b3_positions": true,
+        "b3_snapshots": true,
+        "cards": true,
+        "categories": true,
+        "entries": true,
+        "investments": true
+      },
+      "counts": {
+        "accounts": 1,
+        "android_metadata": 1,
+        "b3_positions": 3,
+        "b3_snapshots": 1,
+        "cards": 0,
+        "categories": 14,
+        "entries": 1,
+        "investments": 1
+      },
+      "newInvestmentDefaults": [
+        "",
+        0,
+        "",
+        "",
+        ""
+      ]
+    },
+    "nativePdf": {
+      "export": "Compartilhar PDF via native Android chooser",
+      "generatedBytes": 85812,
+      "pages": 2,
+      "pageSize": "A4",
+      "version": "1.4",
+      "textAssertions": [
+        "period",
+        "income",
+        "expense",
+        "result",
+        "category",
+        "investment simple return",
+        "original B3 partial valuation",
+        "full transaction"
+      ],
+      "firstPageRenderedAndInspected": true
+    },
+    "visualThemes": [
+      "dark",
+      "light"
+    ],
+    "screenshots": [
+      "artifacts/screenshots/0.5.0-relatorios-escuro.png",
+      "artifacts/screenshots/0.5.0-relatorios-claro.png"
+    ]
+  },
+  "marketData": {
+    "provider": "brapi",
+    "api": "v2",
+    "publicClientLiveProbe": {
+      "ticker": "PETR4",
+      "searchClasses": [
+        "stock",
+        "FII",
+        "ETF",
+        "BDR",
+        "unit"
+      ],
+      "noKeyCrypto": "401 expected"
+    },
+    "paidKeyConfigured": false,
+    "genuineRealtime": false,
+    "refresh": "opt-in, hourly while foreground, manual action available",
+    "limits": "Provider delay/plan/key apply; fixed income and Treasury remain manual"
+  },
+  "limitations": [
+    "No physical Samsung S22 Ultra validation",
+    "No paid/authenticated provider account configured",
+    "Backend unchanged and not connected to Android"
+  ]
+}

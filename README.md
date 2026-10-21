@@ -1,68 +1,78 @@
 # MyFinanceHub para Android
 
-Organizador de finanças pessoais em português. O APK atual funciona inteiramente de forma local: não exige login, não solicita permissão de internet e não envia os dados a um servidor.
-
-O repositório também contém um [backend preparatório de Open Finance](backend/README.md), separado do APK. Ele consulta contas, saldos e transações pelo Meu Pluggy; ainda depende de cadastro, autorização dos bancos, configuração privada e implantação HTTPS. Consulte o [guia de ativação e limites de Pix/carteiras](docs/OPEN-FINANCE.md).
+Organizador de finanças pessoais em português. Contas, lançamentos, categorias, importações e relatórios funcionam no aparelho, sem login. A versão 0.5.0 acrescenta relatórios por período e conta, rentabilidade simples dos investimentos e consulta opcional de cotações pela brapi.
 
 ## Instalar no celular
 
-O APK de testes padrão está em [`artifacts/MyFinanceHub-0.4.0-local-debug.apk`](artifacts/MyFinanceHub-0.4.0-local-debug.apk), quando gerado. Requer **Android 8.0 ou superior**. A versão 0.4.0 acrescenta a importação de posições da Área do Investidor B3 em Excel (XLSX) ou CSV, com revisão antes de salvar. Mantém a aparência clara, escura ou conforme o sistema. O Painel reúne saldo e investimentos; os lançamentos, a importação, os totais mensais e os gastos por categoria ficam em **Lançamentos**.
+APK: [`artifacts/MyFinanceHub-0.5.0-debug.apk`](artifacts/MyFinanceHub-0.5.0-debug.apk). Requer **Android 8.0 ou superior**. Esta versão tem uma única edição, código de versão 7. A captura de notificações foi removida; não há integração com WhatsApp nem transcrição de áudio.
 
-Também há o [`artifacts/MyFinanceHub-0.4.0-notifications-debug.apk`](artifacts/MyFinanceHub-0.4.0-notifications-debug.apk), com o módulo experimental de notificações. **Escolha um dos APKs:** ambos usam o mesmo pacote e a mesma assinatura, atualizam o mesmo aplicativo e não são instalados lado a lado. A edição `local` não declara o serviço de leitura de notificações nem mostra os controles de captura.
+Exporte um backup na versão instalada, se ela abrir, e instale o APK por cima, **sem desinstalar**. O pacote `br.com.myfinancehub` e a assinatura de desenvolvimento são mantidos. O banco v3 recebe migração aditiva das versões v1/v2; backups novos são v3 e a restauração aceita v1, v2 e v3. Não abra esse banco em versões antigas do aplicativo.
 
-Para atualizar as versões anteriores enviadas aqui, exporte um backup na versão atual, se ela abrir, e instale por cima, **sem desinstalar**. O pacote `br.com.myfinancehub` e a assinatura de desenvolvimento foram mantidos. Uma migração aditiva para banco v2 preserva os dados existentes. O backup novo é v2 e o app também restaura backups v1; o código da versão passa para 6. Confira os dados existentes após a atualização.
+1. Transfira o APK para o celular e abra o arquivo. Autorize a instalação pelo aplicativo de arquivos, se o Android solicitar.
+2. Confira os dados existentes depois da atualização. Na primeira instalação, a conta “Principal” começa vazia; configure contas e cartões em **Carteira**.
+3. Em **Lançamentos**, use **Novo lançamento**, **Importar extrato** ou **Gerenciar categorias**.
+4. Em **Relatórios**, escolha período e conta para consultar entradas, despesas e resultado, salvar PDF/CSV ou compartilhar um PDF.
+5. Em **Ajustes → Aparência**, escolha **Seguir o sistema**, **Claro** ou **Escuro**.
 
-1. Transfira o APK para o celular e abra o arquivo.
-2. Autorize a instalação por esse aplicativo de arquivos, se o Android solicitar.
-3. Abra **MyFinanceHub**. Na primeira instalação, a conta “Principal” começa vazia; em **Carteira**, edite seu saldo inicial e cadastre suas outras contas e cartões. Após uma atualização, confira os dados existentes.
-4. Abra **Lançamentos** para adicionar registros ou usar **Importar extrato**. Em **Ajustes → Aparência**, escolha **Seguir o sistema**, **Claro** ou **Escuro**.
+É um APK de testes assinado com chave de desenvolvimento, não uma publicação na Play Store. Preserve a chave e o identificador para futuras atualizações. **Desinstalar apaga os dados locais.** Se houver falha de instalação, mantenha a instalação atual e registre a mensagem. Mantenha as proteções do aparelho ativadas; a aceitação desta versão no Samsung S22 Ultra depende de verificação nesse aparelho.
 
-Este APK é assinado com uma chave de desenvolvimento. Não é uma publicação na Play Store. Para atualizar sem desinstalar, preserve a mesma chave e o identificador `br.com.myfinancehub`. **Desinstalar apaga os dados locais.** Se houver conflito de assinatura, preserve a instalação atual e registre a mensagem para diagnóstico. Para distribuição definitiva, configure uma chave de release própria fora do Git.
+## Organização do app
 
-No Samsung S22 Ultra, o usuário relatou bloqueio do Play Protect na 0.2.0 e informou que ela instalou após pausar a proteção. A orientação é **manter o Play Protect ativado**. A instalação e a aceitação da 0.4.0 nesse aparelho ainda precisam ser verificadas; a edição local não garante aceitação. Se houver bloqueio, preserve a instalação atual e registre a mensagem, sem desativar proteções para contorná-lo.
+| Tela | Conteúdo |
+| --- | --- |
+| Painel | Saldo das contas e investimentos, com posições cadastradas e B3 separadas |
+| Lançamentos | Cadastro, importação CSV/OFX, resumo mensal, busca, filtros e acesso às categorias |
+| Relatórios | Período e conta, entradas, despesas, resultado, categorias, comparação mensal e exportação |
+| Carteira | Contas, cartões, investimentos, rentabilidade simples, cotações e posição B3 |
+| Ajustes | Aparência, categorias, arquivos, backup e restauração |
 
-## Funcionalidades
+Categorias podem ser criadas, buscadas, editadas e excluídas em **Lançamentos → Gerenciar categorias** ou em **Ajustes**. Excluir uma categoria preserva seus lançamentos. Também é possível criar uma categoria dentro do formulário de lançamento sem perder o preenchimento.
 
-- Contas com saldo inicial e saldo calculado a partir dos lançamentos.
-- Entradas e saídas com data, categoria, conta, valor e forma de pagamento; criação, edição e exclusão.
-- Categorias personalizadas de entrada, saída ou ambas. Excluir uma categoria preserva os lançamentos.
-- Cartões por nome e últimos quatro dígitos, fechamento e vencimento cadastrados, e movimentações mensais por cartão.
-- Investimentos manuais, com nome, ticker opcional, tipo, valor aplicado e valor atual.
-- Posição B3 separada: importação local XLSX/CSV com data de referência, revisão, ativos, instituições, quantidades e valores informados; busca e reimportação sem acumular cópias.
-- Painel com saldo das contas e resumo dos investimentos: aplicado, valor atual e variação.
-- Lançamentos com resumo mensal de entradas e saídas, despesas por categoria, busca e filtros.
-- Aparência clara, escura ou conforme o sistema; formulários, diálogos, seletores e calendário acompanham o tema.
-- Busca e posição de rolagem preservadas por aba. A lista começa com 30 registros; **Mostrar mais** permite continuar a consulta.
-- Opção de ocultar valores.
-- Importação CSV/OFX com escolha de conta e cartão, prévia, validação e deduplicação.
-- Exportação CSV e backup/restauração integral em JSON.
-- Importação em destaque em Lançamentos, também disponível em Ajustes; a prévia informa o período e a conclusão abre o mês mais recente do arquivo, limpando busca e filtros.
-- Aba Categorias com busca, botões Editar/Excluir e criação de categoria dentro do lançamento sem perder o formulário.
-- Módulo de notificações preservado no flavor experimental `notifications`, separado do APK local distribuído.
+Busca e posição de rolagem são preservadas por tela. As listas de lançamentos e posições B3 começam com 30 resultados e oferecem **Mostrar mais**. A opção **Ocultar valores** acompanha as telas e o conteúdo acessível. A aparência escolhida fica salva neste aparelho e não integra o backup financeiro.
 
-O SQLite fica no armazenamento privado do aplicativo. Valores são inteiros em centavos, sem cálculos monetários com ponto flutuante. Não há anúncios, telemetria ou serviços remotos. O armazenamento não tem senha ou criptografia própria do app: proteja o aparelho com bloqueio de tela. Backups exportados são texto sem criptografia; mantenha-os em local seguro. O backup automático do Android está desativado.
+## Relatórios
 
-A aparência escolhida fica nas preferências locais e é mantida ao fechar o app. **Seguir o sistema** acompanha o modo claro/escuro do Android. Essa preferência não faz parte do backup financeiro JSON; a troca de aparência não altera contas, categorias ou lançamentos.
+O destaque é **entradas, despesas e resultado do período**. Selecione **Este mês**, **Últimos 3 meses**, **Este ano** ou **Personalizado**, com todas as contas ou uma conta específica. Os dias inicial e final são inclusivos; o limite é de 120 meses. As datas efetivas ficam visíveis, inclusive quando o período inclui lançamentos futuros já cadastrados.
 
-## Saldos e cartões
+Compras no crédito entram nas despesas. Transferências entre contas próprias e pagamentos de fatura ficam fora do resultado, evitando contar o pagamento novamente depois da compra. A **movimentação nas contas** é separada: inclui transferências e faturas, exclui crédito e não representa saldo inicial ou final histórico.
 
-O saldo de uma conta é seu saldo inicial, mais entradas e menos saídas **fora do crédito**. Compras e estornos no crédito ficam associados ao cartão, mas não alteram o caixa.
+- **Salvar PDF:** resumo, categorias, comparação mensal e todos os lançamentos do filtro, até 5.000 registros. O PDF não corta silenciosamente os lançamentos excedentes.
+- **Compartilhar PDF:** abre o seletor de compartilhamento do Android com acesso de leitura ao documento gerado.
+- **Exportar CSV:** tabela completa dos lançamentos do filtro, com conta, categoria, cartão, método e indicação de inclusão no resultado. A exportação CSV não tem o limite de 5.000 registros do PDF.
 
-Ao pagar uma fatura, cadastre uma **saída** na conta debitada com a forma **Pagamento de fatura**. Ela reduz o saldo, mas fica fora dos totais e gráficos de despesas em Lançamentos, pois as compras já foram registradas. Ao importar extratos bancários, revise os pagamentos de fatura e altere essa forma manualmente: os formatos genéricos não permitem identificá-los com segurança.
+Os arquivos contêm valores completos. Se os valores estiverem ocultos, o app pede confirmação antes de exportar ou compartilhar. O PDF com **Todas as contas** também informa as posições atuais dos investimentos separadamente; elas não representam a rentabilidade do período. Veja os [detalhes e limites](docs/RELATORIOS-E-COTACOES.md).
 
-Os totais dos cartões mostram o **mês civil escolhido em Lançamentos**, não uma fatura calculada pelo fechamento. Parcelamentos, juros e conciliação automática de faturas não são calculados nesta versão. Fechamento e vencimento são dados de referência.
+## Investimentos e cotações opcionais
 
-As posições de investimentos são independentes das contas. Aportes e resgates precisam também dos respectivos lançamentos na conta. Não há cotação automática, cálculo tributário ou recomendação de investimento.
+Cadastre nome, código, tipo, total aplicado e valor atual. A **rentabilidade simples** é a diferença entre valor atual e aplicado, em reais e percentual sobre o aplicado; percentual indisponível quando o aplicado é zero. Ela não considera datas de aportes/resgates, dividendos, impostos ou taxas e não é retorno histórico ou anualizado.
 
-Para transferir entre contas próprias, registre uma saída na origem e uma entrada no destino, ambas com a forma **Transferência entre minhas contas**. O saldo total permanece correto; esses registros ficam fora dos totais de receitas e despesas em Lançamentos. Nenhum pagamento ou transferência real é feito pelo app.
+Em **Carteira → Cotações e atualização**, pesquise os ativos disponíveis no catálogo da bolsa B3 ou criptomoedas. A cobertura inclui ações, FIIs, ETFs, BDRs e units, além dos outros fundos listados disponíveis no provedor. Criptomoedas são identificadas em reais, como `BTC-BRL`. Tesouro Direto, CDB, LCI, LCA e outros ativos sem preço compatível nesta integração continuam com valor manual.
+
+Para atualizar uma posição cadastrada, informe código e quantidade e marque **Atualizar este investimento por cotação**. O app calcula quantidade × preço unitário em reais e atualiza o valor atual e os totais; o total aplicado permanece como foi cadastrado. Quantidades usam até oito casas decimais e preços até doze; a posição é arredondada para centavos.
+
+A atualização global vem desligada. Em **Cotações e atualização**, salve a configuração e ative **Atualizar ao abrir a carteira** para consultar automaticamente com o app aberto, em Painel, Carteira ou Posição B3, respeitando o intervalo de uma hora. **Atualizar investimentos agora** solicita uma rodada manual. Não há atualização agendada com o app fechado.
+
+Fonte: **brapi**, com horário do dado exibido. As cotações de bolsa têm atraso aproximado de **30 minutos no Gratuito, 15 no Startup e 5 no Pro**; não são preços em tempo real. Sem chave, PETR4, VALE3, ITUB4 e MGLU3 permitem testes. Outros ativos dependem da chave e da cobertura do plano; criptomoedas exigem Startup ou Pro. A chave é obtida pelo próprio usuário no [dashboard da brapi](https://brapi.dev/dashboard), informada somente no app e guardada em preferências privadas, fora do backup JSON. Nenhuma conta paga é criada pelo aplicativo.
+
+Uma falha preserva o último preço e seu horário. Cotações antigas continuam sendo referências antigas, mesmo após uma nova tentativa. As consultas enviam ao provedor os códigos ou termos pesquisados e a chave, quando configurada, por HTTPS; quantidades, custos, saldos e lançamentos não são enviados. O provedor também recebe os dados de conexão usuais, como o IP. Confira [configuração, limites e fontes oficiais](docs/RELATORIOS-E-COTACOES.md).
+
+## Dados, saldos e cartões
+
+O SQLite fica no armazenamento privado do aplicativo. Valores financeiros usam centavos inteiros; multiplicações de quantidade e preço usam decimais exatos. Não há anúncios ou telemetria. A permissão `INTERNET` atende somente às consultas opcionais de mercado. Controles financeiros e relatórios não dependem dela nem de um backend.
+
+O armazenamento não possui senha ou criptografia própria do app; proteja o aparelho com bloqueio de tela. Backups JSON, CSV e PDF exportados não são criptografados. O backup automático do Android está desativado. A chave do provedor, preferências e cache de cotações não fazem parte do backup financeiro; os dados de cotação já aplicados a investimentos cadastrados fazem parte do backup v3.
+
+O saldo de uma conta é seu saldo inicial, mais entradas e menos saídas **fora do crédito**. Compras e estornos no crédito ficam associados ao cartão e não alteram o caixa. Ao pagar a fatura, cadastre uma **saída** na conta debitada com a forma **Pagamento de fatura**: ela reduz o saldo sem repetir a despesa no resultado. Ao importar extratos genéricos, revise essa forma manualmente.
+
+Os totais de cartão mostram o **mês civil escolhido em Lançamentos**, não uma fatura calculada pelo fechamento. Parcelamento, juros e conciliação automática de faturas não são calculados; fechamento e vencimento são referências.
+
+Para transferências próprias, registre saída na origem e entrada no destino, ambas com **Transferência entre minhas contas**. Não há pagamento ou transferência bancária real pelo app. Investimentos são independentes das contas; aportes e resgates precisam também dos respectivos lançamentos. Não há cálculo tributário ou recomendação de investimento.
 
 ## Importar posições B3
 
-Baixe **Excel → Posição** na [Área do Investidor](https://www.investidor.b3.com.br/) pelo navegador, volte ao app e use **Carteira → Abrir posição B3 → Importar posição B3**. Revise o arquivo e a data. Nenhuma senha é recebida pelo app. O importador aceita XLSX ou CSV com tabelas compatíveis, até 8 MiB e 5.000 posições; não aceita PDF, XLS, movimentações, fórmulas ou vínculos externos. Arquivos reais ainda precisam ser conferidos: um layout não reconhecido gera erro sem alterar a posição anterior.
+Baixe **Excel → Posição** na [Área do Investidor](https://www.investidor.b3.com.br/) pelo navegador, volte ao app e use **Carteira → Abrir posição B3 → Importar posição B3**. Confira arquivo e data na prévia. Nenhuma senha da B3 é recebida pelo app. Aceita XLSX/CSV compatível até 8 MiB e 5.000 posições; não aceita PDF, XLS, movimentações, fórmulas ou vínculos externos. Layout desconhecido gera erro sem alterar a posição anterior. Consulte os [formatos B3](docs/B3.md).
 
-A B3 restringe a API direta ao acesso empresarial autorizado. Esta versão atualiza por arquivo, com valores de referência do relatório, separados dos investimentos manuais. Sem avaliação, a posição aparece como não informada. Veja [formatos, limites e tratamento financeiro](docs/B3.md) e [a validação da 0.4.0](docs/VALIDACAO-0.4.0.md).
-
-**Antes de atualizar, salve um backup.** O banco v2 preserva os dados da 0.3.0 e inclui o relatório B3 nos backups novos. Não volte à 0.3.0 usando o banco atualizado; a versão antiga não suporta banco/backup v2.
+O relatório importado mantém os valores e as quantidades da sua data de referência. Ele fica separado dos investimentos cadastrados e do saldo; não estabelece custo de aquisição ou rentabilidade. As consultas de mercado podem mostrar uma **estimativa separada**, usando a quantidade importada e a cotação armazenada, sem modificar o documento original ou sincronizar a custódia. A estimativa pode cobrir apenas parte da carteira e ficar desatualizada se houver compras, vendas ou eventos societários desde a importação. A API direta de custódia B3 não está integrada.
 
 ## Importar extratos
 
@@ -92,35 +102,11 @@ Identificadores `FITID`/`id` detectam reimportações na mesma conta. Sem identi
 
 PDF, fotos e formatos proprietários não são suportados. O CSV serve para planilhas e protege campos textuais contra fórmulas. O **backup JSON** preserva os dados originais e todos os vínculos, com limite de 8 MiB por backup nesta versão. Bases maiores exigem exportação CSV e não têm restauração integral suportada. Restaurar exige confirmação e substitui todo o conteúdo atual de forma transacional; backups inválidos são rejeitados sem apagar a base.
 
-## Notificações — módulo experimental separado
-
-O flavor `local` é a distribuição padrão: `BuildConfig.NOTIFICATION_CAPTURE_ENABLED` fica desativado, o manifesto não declara o serviço de captura nem suas consultas a apps e a interface não mostra os controles de notificações. **O APK 0.4.0 local não oferece este fluxo.**
-
-O código do módulo permanece no flavor `notifications`, com a flag ativada, para desenvolvimento e validação separados. Nesse flavor experimental, o fluxo em **Ajustes → Notificações de transações** é:
-
-1. Toque em **Escolher apps** e selecione os bancos/carteiras instalados que deseja acompanhar. XP, Itaú, Mercado Pago e Samsung Wallet aparecem com prioridade quando encontrados pelo nome; nenhum app é selecionado automaticamente.
-2. Toque em **Permitir acesso no Android**, leia a explicação e conceda o acesso ao serviço **MyFinanceHub — sugestões de transações**, se desejar. O Android concede acesso amplo às notificações; o aplicativo filtra os apps escolhidos antes de ler o conteúdo. É possível revogar o acesso a qualquer momento.
-3. Ligue **Capturar novas notificações**. Por padrão, a captura está desligada. Apenas conceder o acesso do Android não liga a captura.
-4. Após receber um alerta compatível, abra essa tela. Use **Atualizar lista** se o aplicativo já estava aberto.
-5. Toque em **Revisar → Conferir dados**, escolha a conta, confira data/valor/tipo/categoria/forma de pagamento e cartão e salve. Cancelar mantém a sugestão pendente; **Descartar** remove a sugestão sem alterar seus lançamentos.
-
-Nenhum lançamento é criado automaticamente. O módulo usa padrões genéricos em português para compras/pagamentos aprovados, PIX enviado/recebido e depósitos/transferências recebidos. O texto varia por banco, versão do app e Android: **a compatibilidade real com XP, Itaú, Mercado Pago e Samsung Wallet precisa ser conferida no aparelho**. Os exemplos automatizados são fictícios, não modelos oficiais desses fornecedores.
-
-O método Crédito/Débito só é sugerido quando explícito no alerta. Se estiver indefinido, confira e escolha a forma correta: ela determina se a compra altera o saldo da conta. Um único cartão cadastrado com o mesmo final pode ser sugerido; finais repetidos ou desconhecidos exigem seleção manual. A data sugerida é a data de publicação do alerta, que pode diferir da transação.
-
-Não são buscadas notificações antigas ao ativar. Alertas sem valor em reais reconhecível, códigos/senhas, ofertas, saldo/limite isolados, faturas, recusas, investimentos e valores ambíguos são ignorados. Ordens de investimento e cotações da XP continuam no controle manual de investimentos.
-
-As sugestões guardam apenas dados resumidos localmente, sem o texto bruto do alerta, e ficam até 30 dias/máximo de 100 pendentes. Marcadores de descarte/revisão ficam até 90 dias/máximo de 1.000 para reduzir reentregas. O app não envia esses dados pela internet.
-
-Reentregas do mesmo alerta com a mesma chave, horário e dados financeiros são deduplicadas. Atualizações do banco com novo horário ou alertas de duas fontes (banco e Samsung Wallet) podem aparecer separados. A revisão avisa quando já existe lançamento da mesma data/tipo/valor; confira possíveis duplicatas de CSV, lançamento manual ou outro app. Não unificamos automaticamente transações com valores iguais. Um alerta já confirmado não pode ser gravado novamente em outra conta com a mesma origem.
-
-O backup JSON inclui os lançamentos confirmados, mas não a fila de sugestões nem preferências/permissões da captura. Configure novamente em outro aparelho. Para pausar, desligue a captura; para revogar o acesso, use as configurações do Android.
-
-Se o Android ou o Play Protect bloquear o módulo experimental, mantenha as proteções e registre a mensagem para diagnóstico. O controle financeiro local não depende desse acesso.
+Consulte o [registro de validação da 0.5.0](docs/VALIDACAO-0.5.0.md) para testes, atualização no emulador e limites da verificação.
 
 ## Desenvolvimento
 
-Android nativo em Java 17, Android Gradle Plugin 8.9.2, Gradle Wrapper 8.11.1, SDK 35, mínimo SDK 26. Use o checkout existente: as tarefas na nuvem já são isoladas; não é necessário criar outro worktree.
+Android nativo em Java 17, Android Gradle Plugin 8.9.2, Gradle Wrapper 8.11.1, SDK 35, mínimo SDK 26. Use o checkout existente; as tarefas na nuvem já são isoladas.
 
 Em Linux x86_64 com `curl`, Python 3, `unzip`, `tar`, `sha256sum` e `sha1sum`:
 
@@ -130,50 +116,36 @@ cd /workspace/MyFinanceHub
 ./scripts/verify.sh
 ```
 
-O setup instala JDK 21, Gradle e Android SDK em `/workspace/.myfinancehub-tools`, confere checksums publicados e aceita as licenças padrão necessárias do Android SDK. Pode ser repetido; ferramentas, caches e chave de desenvolvimento ficam fora do Git. Proxy e confiança TLS são obtidos em tempo de execução, sem credenciais gravadas no projeto.
+O setup instala JDK 21, Gradle, SDK e caches em `/workspace/.myfinancehub-tools`, confere checksums publicados e aceita as licenças padrão necessárias. Ferramentas, caches e chave de desenvolvimento ficam fora do Git. Proxy e confiança TLS são obtidos em tempo de execução, sem credenciais gravadas no projeto.
 
 Comandos individuais:
 
 ```sh
-./scripts/gradle.sh --no-daemon testLocalDebugUnitTest
-./scripts/gradle.sh --no-daemon lintLocalDebug
-./scripts/gradle.sh --no-daemon assembleLocalDebug
+./scripts/gradle.sh --no-daemon testDebugUnitTest
+./scripts/gradle.sh --no-daemon lintDebug
+./scripts/gradle.sh --no-daemon assembleDebug
 ```
 
-Para validar o módulo experimental separadamente:
+`verify.sh` executa testes, lint e build da única edição. APK gerado: `app/build/outputs/apk/debug/app-debug.apk`. Relatórios dos verificadores: `app/build/reports/`. Para atualizar a cópia distribuível após concluir a validação:
 
 ```sh
-./scripts/gradle.sh --no-daemon testNotificationsDebugUnitTest
-./scripts/gradle.sh --no-daemon lintNotificationsDebug
-./scripts/gradle.sh --no-daemon assembleNotificationsDebug
+cp app/build/outputs/apk/debug/app-debug.apk artifacts/MyFinanceHub-0.5.0-debug.apk
+sha256sum artifacts/MyFinanceHub-0.5.0-debug.apk > artifacts/MyFinanceHub-0.5.0-debug.apk.sha256
 ```
 
-`verify.sh` executa testes e lint dos dois flavors e monta ambos os APKs. APK local gerado: `app/build/outputs/apk/local/debug/app-local-debug.apk`. O experimental fica em `app/build/outputs/apk/notifications/debug/app-notifications-debug.apk`. Relatórios: `app/build/reports/`. Para atualizar as cópias distribuíveis:
+No Android Studio, configure JDK compatível e SDK 35. `local.properties`, chaves e saídas de build são ignorados. Os testes substituem as consultas de mercado por respostas fictícias: montar e validar o APK não exige chave brapi, credenciais bancárias ou backend. A validação HTTPS opcional usa apenas símbolos públicos, sem dados pessoais.
 
-```sh
-cp app/build/outputs/apk/local/debug/app-local-debug.apk artifacts/MyFinanceHub-0.4.0-local-debug.apk
-sha256sum artifacts/MyFinanceHub-0.4.0-local-debug.apk > artifacts/MyFinanceHub-0.4.0-local-debug.apk.sha256
-cp app/build/outputs/apk/notifications/debug/app-notifications-debug.apk artifacts/MyFinanceHub-0.4.0-notifications-debug.apk
-sha256sum artifacts/MyFinanceHub-0.4.0-notifications-debug.apk > artifacts/MyFinanceHub-0.4.0-notifications-debug.apk.sha256
-```
-
-No Android Studio, abra o projeto e configure JDK compatível e SDK 35. `local.properties`, chaves e saídas de build são ignorados. O APK local e seus testes não exigem backend, chaves de API ou credenciais bancárias.
-
-O backend usa Node.js 22 ou superior, sem dependências externas. Seus testes são offline e usam dados fictícios:
+O repositório contém um [backend preparatório de Open Finance](backend/README.md), separado do APK. Requer Node.js 22 ou superior e seus testes offline não têm dependências npm:
 
 ```sh
 cd backend
 npm test
 ```
 
-Os passos reutilizáveis do ambiente estão em [docs/AMBIENTE-NUVEM.md](docs/AMBIENTE-NUVEM.md). A validação desta preparação está em [docs/VALIDACAO-OPEN-FINANCE.md](docs/VALIDACAO-OPEN-FINANCE.md).
+O Android não está conectado a esse backend. A execução real depende de cadastro, consentimento bancário, secrets privados e implantação HTTPS; consulte [OPEN-FINANCE.md](docs/OPEN-FINANCE.md). Os passos reutilizáveis do ambiente estão em [AMBIENTE-NUVEM.md](docs/AMBIENTE-NUVEM.md).
 
-## Próximas etapas
+## Validação no celular
 
-Siga o [roteiro de testes no celular](docs/TESTES-NO-CELULAR.md) para verificar os dados preservados, os três modos de aparência, as telas e a importação histórica. O módulo experimental de notificações precisa de validação separada com os alertas reais do aparelho; a identificação automática não é garantida.
+Siga o [roteiro de testes no Android](docs/TESTES-NO-CELULAR.md) para verificar atualização preservando dados, temas, importações, relatórios, compartilhamento e cotações. O roteiro é uma lista de verificações, não uma declaração de testes já realizados no seu aparelho.
 
-A preparação do backend de Open Finance está em [`backend/`](backend/); a integração com o Android e a sincronização agendada ainda serão desenvolvidas após configurar e validar uma conexão real. O [guia](docs/OPEN-FINANCE.md) recomenda o Meu Pluggy para uso pessoal e explica o cadastro.
-
-A importação de posições B3 já está disponível em **Carteira → Abrir posição B3** e **Painel → Posição B3**. Consulte [o guia B3](docs/B3.md). A posição fica separada do total manual e do saldo, não presume custo de aquisição e não calcula rentabilidade. Substituir o relatório exige confirmação e não cria lançamentos.
-
-A sincronização automática pela API B3, pagamentos Pix e conexões diretas com Samsung Wallet e Google Wallet são módulos futuros. Dependem de APIs oficiais, consentimento e, quando aplicável, provedores/contratos autorizados. O APK local usa lançamentos manuais e importação de extratos; não se conecta à conta bancária ou à carteira e não faz pagamentos.
+Bancos, pagamentos Pix, integração direta com carteiras e sincronização automática da custódia B3 não estão conectados ao APK. A captura de notificações e a ideia de WhatsApp foram retiradas desta etapa. Documentos de validação de versões antigas permanecem como histórico; não descrevem as opções da 0.5.0.

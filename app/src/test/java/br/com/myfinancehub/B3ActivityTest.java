@@ -295,7 +295,7 @@ public final class B3ActivityTest {
         assertNotContains(screen(), "12.345");
         assertContains(screen(), "Ação fictícia");
         assertEquals(original, store.exportBackup());
-        clickClickable(byDescription(screen(), "Detalhes de Ação fictícia"));
+        clickClickable(byDescription(screen(), "Detalhes de Ação fictícia, R$ ••••"));
         assertNotContains(dialog().getWindow().getDecorView(), "1.234,56");
         assertNotContains(dialog().getWindow().getDecorView(), "12,345");
         assertNotContains(dialog().getWindow().getDecorView(), "12.345");

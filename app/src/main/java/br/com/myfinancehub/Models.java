@@ -66,6 +66,12 @@ public final class Models {
         public long id;
         public String name = "", ticker = "", kind = "";
         public long investedCents, currentCents;
+        /** Exact unit quantity using a decimal dot; empty means it has not been entered. */
+        public String quantity = "";
+        /** User opt-in to refresh this investment when automatic quotes run. */
+        public boolean autoQuote;
+        /** Last unit price in BRL as an exact decimal, with its provider timestamp/source. */
+        public String quotePrice = "", quoteAt = "", quoteSource = "";
         public Investment() {}
         public Investment(long id, String name, String ticker, String kind,
                           long investedCents, long currentCents) {

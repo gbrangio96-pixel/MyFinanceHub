@@ -5,8 +5,8 @@
   "date": "2026-10-21",
   "apk": {
     "path": "artifacts/MyFinanceHub-0.5.0-debug.apk",
-    "bytes": 317022,
-    "sha256": "8d045e80c49e7855b1d59de261cdf1edb8bf43cc0bae8765a70c88c00efa852b",
+    "bytes": 317157,
+    "sha256": "8d48ef1a988af0fe3a9a39bb62ceac5403ba8b1886cb7757983a4d815087df37",
     "certificateSha256": "3aed65b8149ccd92287cc1055b57a5ae6b909f12d9282ffab221c24a8dadb446",
     "signatureVerified": true,
     "zipAlignmentVerified": true,
@@ -19,7 +19,7 @@
   "android": {
     "command": "./scripts/verify.sh",
     "passed": true,
-    "tests": 240,
+    "tests": 244,
     "failures": 0,
     "errors": 0,
     "skipped": 0,
@@ -124,6 +124,13 @@
         "skipped": 0
       },
       {
+        "name": "br.com.myfinancehub.QuotesActivityTest",
+        "tests": 4,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      },
+      {
         "name": "br.com.myfinancehub.ReportActivityTest",
         "tests": 9,
         "failures": 0,
@@ -205,7 +212,9 @@
     "screenshots": [
       "artifacts/screenshots/0.5.0-relatorios-escuro.png",
       "artifacts/screenshots/0.5.0-relatorios-claro.png"
-    ]
+    ],
+    "quotesActivityStartupPassed": true,
+    "quotesActivity": "Opened and rendered on Android API35; automatic refresh off by default, no key configured"
   },
   "marketData": {
     "provider": "brapi",

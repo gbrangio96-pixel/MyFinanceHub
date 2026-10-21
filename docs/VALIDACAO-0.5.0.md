@@ -4,14 +4,14 @@ Validação realizada em 21/10/2026. APK único, versão 0.5.0, código 7, pacot
 
 ## Android e cálculos
 
-`./scripts/verify.sh` terminou com sucesso: **240 testes aprovados**, sem falhas, erros ou testes ignorados; lint **sem problemas encontrados**; APK montado. A suíte cobre importações, migrações, backup/restauração, temas, relatórios, limites monetários, PDF paginado, compartilhamento somente para leitura, consulta de preços, cache, cancelamento e corridas entre edição e atualização.
+`./scripts/verify.sh` terminou com sucesso: **244 testes aprovados**, sem falhas, erros ou testes ignorados; lint **sem problemas encontrados**; APK montado. A suíte cobre importações, migrações, backup/restauração, temas, relatórios, limites monetários, PDF paginado, compartilhamento somente para leitura, consulta de preços, cache, cancelamento e corridas entre edição e atualização.
 
 Os testes de rede usam transporte substituível, dados fictícios e decimais exatos. Foram conferidos crédito, pagamento de fatura e transferência sem duplicidade; filtro inclusivo por período/conta; exportação de uma cópia dos dados selecionados; campos CSV protegidos contra fórmulas; preço × quantidade com um único arredondamento final.
 
 ## APK e atualização
 
-- APK: [MyFinanceHub-0.5.0-debug.apk](../artifacts/MyFinanceHub-0.5.0-debug.apk), 317.022 bytes.
-- SHA-256: `8d045e80c49e7855b1d59de261cdf1edb8bf43cc0bae8765a70c88c00efa852b`.
+- APK: [MyFinanceHub-0.5.0-debug.apk](../artifacts/MyFinanceHub-0.5.0-debug.apk), 317.157 bytes.
+- SHA-256: `8d48ef1a988af0fe3a9a39bb62ceac5403ba8b1886cb7757983a4d815087df37`.
 - Assinatura verificada por `apksigner` e alinhamento por `zipalign`. Certificado SHA-256: `3aed65b8149ccd92287cc1055b57a5ae6b909f12d9282ffab221c24a8dadb446`, igual ao das versões anteriores.
 - Android mínimo 8.0/API26, target35. Única permissão: INTERNET, para cotações opcionais. Não declara serviço de notificações ou permissões de áudio, contatos, mensagens e leitura de outros apps.
 
@@ -20,6 +20,8 @@ No emulador API35, `adb install -r` atualizou a 0.4.0/code6 com sucesso. A migra
 A exportação nativa **Compartilhar PDF** produziu um arquivo real de 85.812 bytes, duas páginas A4, versão PDF1.4, e abriu o seletor do Android. `pdfinfo`, `pdftotext` e renderização da primeira página confirmaram resumo, totais, categoria, investimento, valores B3 parciais e lançamento detalhado, sem corte ou ausência do registro. O gerador de PDF não depende de um serviço externo.
 
 Os relatórios foram conferidos visualmente nos modos [Escuro](../artifacts/screenshots/0.5.0-relatorios-escuro.png) e [Claro](../artifacts/screenshots/0.5.0-relatorios-claro.png), preservando o filtro e a posição de rolagem ao trocar o tema.
+
+A tela [Cotações e atualização](../artifacts/screenshots/0.5.0-cotacoes-claro.png) abriu e renderizou no Android15/API35 com o APK final. A inicialização das barras do sistema ocorre após a criação do decor da janela; uma regressão de abertura e proteção da chave foi acrescentada à suíte, junto com persistência da configuração e pesquisa vazia sem rede.
 
 O cold boot do emulador sem aceleração apresentou um aviso de ANR do **System UI do Android**, anterior à validação do APK. O framework se recuperou; a atividade do MyFinanceHub abriu e permitiu o fluxo descrito. Isso não é um teste físico no Samsung S22 Ultra.
 

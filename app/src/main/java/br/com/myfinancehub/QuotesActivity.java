@@ -62,14 +62,16 @@ public final class QuotesActivity extends Activity {
             });
         } else root.setFitsSystemWindows(true);
         getWindow().setStatusBarColor(colors.background); getWindow().setNavigationBarColor(colors.background);
+        ScrollView scroll = new ScrollView(this); content = column();
+        content.setPadding(dp(22), dp(18), dp(22), dp(32)); scroll.addView(content); root.addView(scroll);
+        setContentView(root);
+        // The native window creates its DecorView in setContentView. Accessing its
+        // insets controller before that crashes on Android 15's PhoneWindow.
         if (android.os.Build.VERSION.SDK_INT >= 30 && getWindow().getInsetsController() != null) {
             int light = android.view.WindowInsetsController.APPEARANCE_LIGHT_STATUS_BARS
                     | android.view.WindowInsetsController.APPEARANCE_LIGHT_NAVIGATION_BARS;
             getWindow().getInsetsController().setSystemBarsAppearance(AppAppearance.isDark(this) ? 0 : light, light);
         }
-        ScrollView scroll = new ScrollView(this); content = column();
-        content.setPadding(dp(22), dp(18), dp(22), dp(32)); scroll.addView(content); root.addView(scroll);
-        setContentView(root);
         Button back = button("‹  Voltar à carteira", false); back.setOnClickListener(view -> finish()); add(back, 0, 12);
         add(text("Cotações e atualização", 27, colors.text, true), 0, 8);
         add(text("Consulte preços e acompanhe uma estimativa da sua carteira.", 14, colors.muted, false), 0, 20);
@@ -247,7 +249,9 @@ public final class QuotesActivity extends Activity {
         EditText view = new EditText(this); view.setHint(hint); view.setTextSize(14);
         view.setTextColor(colors.text); view.setHintTextColor(colors.muted); view.setMinHeight(dp(52));
         view.setInputType(InputType.TYPE_CLASS_TEXT | (password ? InputType.TYPE_TEXT_VARIATION_PASSWORD : InputType.TYPE_TEXT_FLAG_CAP_CHARACTERS));
-        view.setSingleLine(true); return view;
+        view.setSingleLine(true);
+        if (password) view.setTransformationMethod(android.text.method.PasswordTransformationMethod.getInstance());
+        return view;
     }
     private Button button(String label, boolean primary) {
         Button view = new Button(this); view.setText(label); view.setAllCaps(false); view.setTextSize(14);

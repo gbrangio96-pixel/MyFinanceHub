@@ -2,6 +2,11 @@ plugins {
     id 'com.android.application'
 }
 
+// Keep the existing install identity while producing a non-debuggable distribution build.
+// The original development signing key lives outside Git; this is not a Play App Signing key.
+def preservedStore = new File(System.getenv('ANDROID_USER_HOME')
+        ?: rootProject.file('../.myfinancehub-tools/android-user').absolutePath, 'debug.keystore')
+
 android {
     namespace 'br.com.myfinancehub'
     compileSdk 35
@@ -10,8 +15,8 @@ android {
         applicationId 'br.com.myfinancehub'
         minSdk 26
         targetSdk 35
-        versionCode 8
-        versionName '0.5.1'
+        versionCode 9
+        versionName '0.6.0'
         testInstrumentationRunner 'android.test.InstrumentationTestRunner'
     }
 
@@ -19,8 +24,20 @@ android {
         buildConfig true
     }
 
+    signingConfigs {
+        preserved {
+            storeFile preservedStore
+            // Android's standard development-key credentials, not provider or user secrets.
+            storePassword 'android'
+            keyAlias 'androiddebugkey'
+            keyPassword 'android'
+        }
+    }
+
     buildTypes {
         release {
+            debuggable false
+            signingConfig signingConfigs.preserved
             minifyEnabled false
         }
     }

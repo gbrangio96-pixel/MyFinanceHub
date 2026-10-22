@@ -1,4 +1,4 @@
-# Relatórios e cotações — 0.5.0
+# Relatórios, investimentos e cotações
 
 ## Consultar e exportar relatórios
 
@@ -42,6 +42,21 @@ O seletor de documentos do Android permite escolher onde salvar, sem permissão 
 **Ocultar valores** mascara a interface, não os arquivos exportados. Nesse modo, **Exportar valores visíveis?** exige confirmação antes de salvar ou compartilhar. PDF, CSV e JSON não são criptografados pelo app.
 
 Com **Todas as contas**, o PDF acrescenta uma seção de investimentos com os valores atuais cadastrados e a posição B3 importada, em blocos separados. Esses valores não são recortados historicamente pelo período do relatório. No filtro de uma conta, o PDF não associa investimentos que não possuem vínculo com essa conta.
+
+## Organizar os investimentos cadastrados
+
+Em **Carteira → Investimentos**, use **Organizar investimentos por**:
+
+- **Tipo:** agrupa pelo tipo informado no cadastro (CDB, ação, Tesouro etc.); cadastros sem tipo aparecem em **Tipo não informado**.
+- **Liquidez:** agrupa em **Diária**, **Até 30 dias**, **Acima de 30 dias**, **No vencimento** e **Não informada**, nessa ordem.
+- **Vencimento / validade:** ordena pelas datas mais próximas primeiro; investimentos sem data ficam no final.
+- **Valor aplicado (maior primeiro):** ordena pelo valor aplicado em centavos, do maior ao menor. Não usa o valor atual nem a rentabilidade para essa ordem.
+
+Cada posição mostra tipo, total aplicado, valor atual, liquidez e vencimento, além da rentabilidade e da última cotação. A organização escolhida fica salva neste aparelho. Alterar a ordem não altera valores, saldos ou cálculos dos relatórios.
+
+Ao criar ou editar, escolha a **Liquidez** e, se existir, o **Vencimento / validade** no calendário. **Limpar vencimento** remove somente a data do formulário; a alteração é aplicada ao salvar. Datas passadas são aceitas para manter contratos vencidos no cadastro. Liquidez e prazo são informações do contrato, não uma garantia de resgate nem um cálculo de preço.
+
+Os dados antigos recebem **liquidez não informada** e **sem vencimento informado**, sem deduções pelo ticker, preço ou tipo de investimento. O banco/backup v4 adiciona esses campos e preserva os valores, quantidades e cotações anteriores. A restauração aceita backups v1, v2, v3 e v4; backups antigos mantêm os novos campos sem informação. A posição B3 importada continua separada e inalterada.
 
 ## Rentabilidade dos investimentos
 
@@ -102,7 +117,7 @@ Tesouro Direto e renda fixa privada — CDB, LCI, LCA e contratos semelhantes �
 
 As consultas opcionais usam HTTPS para `brapi.dev`; a chave segue no header `Authorization`, nunca na URL. O app envia código/termo de busca e chave configurada, sem enviar quantidades, custos, lançamentos ou saldos. A conexão expõe ao provedor os metadados usuais, como IP. Não há integração com notificações, WhatsApp ou bancos nesse fluxo.
 
-A chave fica nas preferências privadas do app, sem criptografia própria, e não é incluída no backup financeiro, nos relatórios ou no código distribuído. Configuração global e cache de preços também ficam fora do JSON. Após restaurar em outro aparelho, configure a chave novamente. Quantidade, habilitação individual e última cotação aplicada a um investimento são dados financeiros preservados pelo backup v3.
+A chave fica nas preferências privadas do app, sem criptografia própria, e não é incluída no backup financeiro, nos relatórios ou no código distribuído. Configuração global e cache de preços também ficam fora do JSON. Após restaurar em outro aparelho, configure a chave novamente. Quantidade, habilitação individual e última cotação aplicada a um investimento são dados financeiros preservados pelo backup v4 (com restauração dos formatos anteriores).
 
 As finanças continuam disponíveis sem internet. Em modo offline, o app mantém as posições com seus últimos valores e datas; a ausência de uma consulta nova não confirma que o preço antigo continua atual.
 

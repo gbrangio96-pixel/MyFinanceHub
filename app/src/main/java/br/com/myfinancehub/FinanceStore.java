@@ -42,7 +42,7 @@ import br.com.myfinancehub.Models.Investment;
  */
 public final class FinanceStore implements AutoCloseable {
     private final Helper helper;
-    private static final int BACKUP_VERSION = 3;
+    private static final int BACKUP_VERSION = 4;
     private static final int MAX_BACKUP_BYTES = 8 * 1024 * 1024;
     private static final BigInteger MAX_CENTS = BigInteger.valueOf(Long.MAX_VALUE);
     private static final BigInteger MIN_CENTS = BigInteger.valueOf(Long.MIN_VALUE);
@@ -287,6 +287,7 @@ public final class FinanceStore implements AutoCloseable {
         investment.quantity = string(c, "quantity"); investment.autoQuote = number(c, "auto_quote") == 1;
         investment.quotePrice = string(c, "quote_price"); investment.quoteAt = string(c, "quote_at");
         investment.quoteSource = string(c, "quote_source");
+        investment.liquidity = string(c, "liquidity"); investment.maturityDate = string(c, "maturity_date");
         return investment;
     }
 
@@ -366,6 +367,20 @@ public final class FinanceStore implements AutoCloseable {
         } finally { db.endTransaction(); }
     }
 
+    /** Reviewed provider entries are globally deduplicated, even after remapping accounts. */
+    public synchronized long saveReviewedPluggy(Entry entry) {
+        if(entry==null||entry.id!=0||entry.sourceKey==null||!entry.sourceKey.matches("pluggy:[0-9a-f]{64}"))throw invalid("Origem Meu Pluggy inválida.");
+        SQLiteDatabase database=db();database.beginTransaction();
+        try {
+            if(hasPluggySource(entry.sourceKey))throw invalid("Esta transação Meu Pluggy já foi salva.");
+            ContentValues values=entryValues(entry);validateEntryReferences(entry,null,null,null);
+            long id=database.insertOrThrow("entries",null,values);validateFinancialRanges();database.setTransactionSuccessful();return id;
+        }finally{database.endTransaction();}
+    }
+    public synchronized boolean hasPluggySource(String sourceKey) {
+        return sourceKey!=null&&sourceKey.matches("pluggy:[0-9a-f]{64}")&&exists("entries","source_key COLLATE NOCASE=?",sourceKey);
+    }
+
     /** Complete versioned UTF-8 JSON backup. Contains sensitive financial data, without encryption. */
     public synchronized String exportBackup() {
         SQLiteDatabase db = db();
@@ -386,7 +401,8 @@ public final class FinanceStore implements AutoCloseable {
             for (Investment i : investments()) investments.put(new JSONObject().put("id", i.id).put("name", i.name)
                     .put("ticker", i.ticker).put("kind", i.kind).put("investedCents", i.investedCents).put("currentCents", i.currentCents)
                     .put("quantity", i.quantity).put("autoQuote", i.autoQuote).put("quotePrice", i.quotePrice)
-                    .put("quoteAt", i.quoteAt).put("quoteSource", i.quoteSource));
+                    .put("quoteAt", i.quoteAt).put("quoteSource", i.quoteSource)
+                    .put("liquidity", i.liquidity).put("maturityDate", i.maturityDate));
             String backup = root.put("categories", categories).put("accounts", accounts).put("cards", cards)
                     .put("entries", entries).put("investments", investments)
                     .put("b3", b3Json(b3Snapshot())).toString(2);
@@ -458,6 +474,9 @@ public final class FinanceStore implements AutoCloseable {
                     i.quotePrice = r.has("quotePrice") ? jsonString(r, "quotePrice") : "";
                     i.quoteAt = r.has("quoteAt") ? jsonString(r, "quoteAt") : "";
                     i.quoteSource = r.has("quoteSource") ? jsonString(r, "quoteSource") : "";
+                }
+                if (backupVersion >= 4) {
+                    i.liquidity = jsonString(r, "liquidity"); i.maturityDate = jsonString(r, "maturityDate");
                 }
                 investmentValues(i); investments.add(i);
             }
@@ -593,6 +612,14 @@ public final class FinanceStore implements AutoCloseable {
         values.put("name", text(investment.name, "Nome do investimento", 100, false));
         values.put("ticker", text(investment.ticker, "Código", 30, true));
         values.put("kind", text(investment.kind, "Tipo de investimento", 80, true));
+        values.put("liquidity", choice(investment.liquidity, "Liquidez", "unknown", "daily", "up_to30", "over30", "at_maturity"));
+        String maturity = text(investment.maturityDate, "Vencimento / validade", 10, true);
+        if (!maturity.isEmpty()) {
+            if (!maturity.matches("[0-9]{4}-[0-9]{2}-[0-9]{2}") || maturity.startsWith("0000")) throw invalid("Informe um vencimento válido no formato AAAA-MM-DD.");
+            try { java.time.LocalDate.parse(maturity); }
+            catch (DateTimeParseException error) { throw invalid("Vencimento / validade inválido."); }
+        }
+        values.put("maturity_date", maturity);
         values.put("invested_cents", investment.investedCents); values.put("current_cents", investment.currentCents);
         String quantity = decimalQuantity(investment.quantity);
         if (investment.autoQuote) {
@@ -860,7 +887,7 @@ public final class FinanceStore implements AutoCloseable {
     private static IllegalArgumentException invalid(String message) { return new IllegalArgumentException(message); }
 
     private static final class Helper extends SQLiteOpenHelper {
-        Helper(Context context) { super(context, "myfinancehub.db", null, 3); }
+        Helper(Context context) { super(context, "myfinancehub.db", null, 4); }
         @Override public void onConfigure(SQLiteDatabase db) { db.setForeignKeyConstraintsEnabled(true); }
         @Override public void onCreate(SQLiteDatabase db) {
             db.execSQL("CREATE TABLE categories (_id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL COLLATE NOCASE UNIQUE, type TEXT NOT NULL CHECK(type IN ('income','expense','both')))");
@@ -872,6 +899,7 @@ public final class FinanceStore implements AutoCloseable {
             db.execSQL("CREATE INDEX entries_card ON entries(card_id)");
             db.execSQL("CREATE TABLE investments (_id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL, ticker TEXT NOT NULL, kind TEXT NOT NULL, invested_cents INTEGER NOT NULL CHECK(invested_cents>=0), current_cents INTEGER NOT NULL CHECK(current_cents>=0))");
             addInvestmentQuoteColumns(db);
+            addInvestmentMetadataColumns(db);
             createB3Tables(db);
             ContentValues account = new ContentValues(); account.put("name", "Principal"); account.put("opening_cents", 0);
             db.insertOrThrow("accounts", null, account);
@@ -886,10 +914,15 @@ public final class FinanceStore implements AutoCloseable {
             db.insertOrThrow("categories", null, values);
         }
         @Override public void onUpgrade(SQLiteDatabase db, int oldVersion, int newVersion) {
-            if (oldVersion < 1 || oldVersion > 2 || newVersion != 3)
+            if (oldVersion < 1 || oldVersion > 3 || newVersion != 4)
                 throw new IllegalStateException("Migração de banco não suportada.");
             if (oldVersion < 2) createB3Tables(db);
-            addInvestmentQuoteColumns(db);
+            if (oldVersion < 3) addInvestmentQuoteColumns(db);
+            addInvestmentMetadataColumns(db);
+        }
+        private static void addInvestmentMetadataColumns(SQLiteDatabase db) {
+            db.execSQL("ALTER TABLE investments ADD COLUMN liquidity TEXT NOT NULL DEFAULT 'unknown' CHECK(liquidity IN ('unknown','daily','up_to30','over30','at_maturity'))");
+            db.execSQL("ALTER TABLE investments ADD COLUMN maturity_date TEXT NOT NULL DEFAULT ''");
         }
         private static void addInvestmentQuoteColumns(SQLiteDatabase db) {
             db.execSQL("ALTER TABLE investments ADD COLUMN quantity TEXT NOT NULL DEFAULT ''");

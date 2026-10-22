@@ -9,4 +9,13 @@
     <string name="credit_statement">Extrato de cartão de crédito</string>
     <string name="notification_access_label">MyFinanceHub — sugestões de transações</string>
     <string name="capture_new_notifications">Capturar novas notificações</string>
+    <string name="pluggy_consult_entry">Consultar ao entrar no aplicativo</string>
+    <string name="pluggy_disconnected">Desconectado neste aparelho.</string>
+    <string name="pluggy_config_kept">Configuração anterior mantida. Consulte para verificar o acesso.</string>
+    <string name="pluggy_config_saved">Configuração protegida no aparelho. Consulte para verificar o acesso.</string>
+    <string name="pluggy_consulting">Consultando a API pessoal Meu Pluggy… Nenhum lançamento será salvo automaticamente.</string>
+    <string name="pluggy_observed">Consulta concluída em %1$s. Não é confirmação de atualização do banco.</string>
+    <string name="pluggy_reconciled">Conferi os registros existentes: este movimento ainda não foi lançado.</string>
+    <string name="pluggy_saved">Lançamento confirmado. Nenhum saldo informado pelo banco foi aplicado.</string>
+    <string name="pluggy_interrupted">Consulta interrompida. Consulte novamente para revisar.</string>
 </resources>

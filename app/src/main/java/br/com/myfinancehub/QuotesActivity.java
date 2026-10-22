@@ -33,7 +33,7 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 
 /** Optional public market-data lookup and foreground refresh settings. */
-public final class QuotesActivity extends Activity {
+public final class QuotesActivity extends LockedActivity {
     private static final int SEARCH_B3 = 1, SEARCH_CRYPTO = 2, QUOTE = 3, REFRESH = 4;
     private final ExecutorService worker = Executors.newSingleThreadExecutor();
     private AppAppearance.Palette colors;

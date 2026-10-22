@@ -1,0 +1,38 @@
+{
+  "version": "0.6.0",
+  "versionCode": 9,
+  "applicationId": "br.com.myfinancehub",
+  "buildType": "release",
+  "debuggable": false,
+  "date": "2026-10-22",
+  "baseCommit": "9007cb189f772a74bdec029e7e766cc24b9b7319",
+  "tests": {
+    "tests": 378,
+    "failures": 0,
+    "errors": 0,
+    "skipped": 0
+  },
+  "lintDebug": "No issues found.",
+  "lintRelease": "No issues found.",
+  "backendOfflineTests": "passed",
+  "databaseAndBackupVersion": 4,
+  "restoreBackupVersions": [
+    1,
+    2,
+    3,
+    4
+  ],
+  "apk": "artifacts/MyFinanceHub-0.6.0-release.apk",
+  "apkBytes": 191092,
+  "sha256": "8dcd1f12fa1be6fa8e932effacae4155205da54f68639d799fd18bafd60e1ca0",
+  "certificateSha256": "3aed65b8149ccd92287cc1055b57a5ae6b909f12d9282ffab221c24a8dadb446",
+  "sameCertificateAs051": true,
+  "zipalign": true,
+  "authentication": "local password, optional hardware strong biometrics, one-time recovery code; no online account",
+  "pluggy": "direct personal API, own encrypted device credentials, manual or opted-in on-entry consultation, reviewed POSTED entries only",
+  "personalProviderCredentialsUsed": false,
+  "realFinancialDataRead": false,
+  "physicalDeviceTested": false,
+  "biometricHardwareTested": false,
+  "playStorePublished": false
+}

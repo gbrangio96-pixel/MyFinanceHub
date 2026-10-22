@@ -164,7 +164,7 @@ public final class B3StoreTest {
         Models.Investment manual = new Models.Investment(0, "Manual", "", "", 4000, 5000); store.saveInvestment(manual);
         store.replaceB3Snapshot(Arrays.asList(position("TEST3", "A", "1", 12345L), position("UNKNOWN", "A", "1", null)), DATE, HASH);
         String backup = store.exportBackup();
-        assertEquals(3, new JSONObject(backup).getInt("version"));
+        assertEquals(4, new JSONObject(backup).getInt("version"));
         store.clearB3Snapshot(); store.deleteInvestment(manual.id);
         store.restoreBackup(backup);
         assertEquals(backup, store.exportBackup());
@@ -195,7 +195,7 @@ public final class B3StoreTest {
         invalid(() -> store.restoreBackup(duplicate.toString())); assertEquals(before, store.exportBackup());
         JSONObject missing = new JSONObject(before); missing.remove("b3");
         invalid(() -> store.restoreBackup(missing.toString())); assertEquals(before, store.exportBackup());
-        JSONObject unsupported = new JSONObject(before); unsupported.put("version", 4);
+        JSONObject unsupported = new JSONObject(before); unsupported.put("version", 5);
         invalid(() -> store.restoreBackup(unsupported.toString())); assertEquals(before, store.exportBackup());
     }
 

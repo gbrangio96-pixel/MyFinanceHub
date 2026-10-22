@@ -66,6 +66,10 @@ public final class Models {
         public long id;
         public String name = "", ticker = "", kind = "";
         public long investedCents, currentCents;
+        /** Optional user-entered liquidity classification; unknown is never inferred. */
+        public String liquidity = "unknown";
+        /** Optional maturity / validity calendar day in ISO format. Empty means not informed. */
+        public String maturityDate = "";
         /** Exact unit quantity using a decimal dot; empty means it has not been entered. */
         public String quantity = "";
         /** User opt-in to refresh this investment when automatic quotes run. */

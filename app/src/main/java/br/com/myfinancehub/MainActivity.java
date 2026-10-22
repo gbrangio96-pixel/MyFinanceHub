@@ -32,7 +32,7 @@ import java.util.*;
 import java.util.concurrent.*;
 
 /** Offline Android client. Money is stored as integer cents; documents use Android's file picker. */
-public final class MainActivity extends Activity {
+public final class MainActivity extends LockedActivity {
     private AppAppearance.Palette colors;
     private int BG, GREEN, LIME, TEXT, MUTED, LINE, RED, WHITE;
     private boolean darkTheme;
@@ -40,6 +40,8 @@ public final class MainActivity extends Activity {
     private static final int IMPORT=41, BACKUP=42, RESTORE=43, CSV=44, B3_IMPORT=45, REPORT_PDF=46, REPORT_CSV=47;
     private static final String[] METHOD_KEYS={"other","pix","debit","credit","cash","transfer","card_payment"};
     private static final String[] METHOD_NAMES={"Outro / extrato","PIX (registro manual)","Débito","Crédito","Dinheiro","Transferência entre minhas contas","Pagamento de fatura"};
+    private static final String[] INVESTMENT_LIQUIDITY_KEYS={"unknown","daily","up_to30","over30","at_maturity"};
+    private static final String[] INVESTMENT_LIQUIDITY_NAMES={"Não informada","Diária","Até 30 dias","Acima de 30 dias","No vencimento"};
     private FinanceStore store;
     private NotificationInbox notificationInbox;
     private LinearLayout root, content, navigation;
@@ -111,7 +113,7 @@ public final class MainActivity extends Activity {
     @Override protected void onDestroy(){quoteHandler.removeCallbacksAndMessages(null);if(activeProgress!=null)activeProgress.dismiss();worker.execute(()->{store.close();notificationInbox.close();});worker.shutdown();super.onDestroy();}
 
     private void maybeAutomaticQuotes(){
-        if(isFinishing()||isDestroyed()||quoteRefreshRunning||activeProgress!=null||!(page==0||page==2||page==6)||!InvestmentQuoteUpdater.isAutomaticRefreshDue(this))return;
+        if(!AuthSession.isUnlocked()||isFinishing()||isDestroyed()||quoteRefreshRunning||activeProgress!=null||!(page==0||page==2||page==6)||!InvestmentQuoteUpdater.isAutomaticRefreshDue(this))return;
         quoteRefreshRunning=true;final int generation=++quoteGeneration;
         automaticQuoteTask=worker.submit(()->{String summary;try{summary=new InvestmentQuoteUpdater(getApplicationContext()).refresh(store,new InvestmentQuotes(),true).summary;}catch(Exception ex){summary="Cotações indisponíveis. Os valores anteriores foram mantidos.";}
             final String result=summary;runOnUiThread(()->{if(generation!=quoteGeneration)return;quoteRefreshRunning=false;if(!isFinishing()&&!isDestroyed()){lastQuoteSummary=result;render();}});});
@@ -326,17 +328,38 @@ public final class MainActivity extends Activity {
             addTo(card,text("Fecha dia "+c.closingDay+" · vence dia "+c.dueDay+" · editar",12,colors.heroMuted,false),0,8,0,0);card.setOnClickListener(v->editCard(c));add(card,0,0,0,12);}
         Button credit=button("+ Adicionar cartão",WHITE,GREEN);credit.setOnClickListener(v->editCard(null));add(credit,0,10,0,0);
         TextView creditNote=text("Crédito não reduz o saldo da conta. Registre o pagamento como saída com a forma “Pagamento de fatura”: ela reduz o saldo sem repetir as despesas do painel. Os valores acima são movimentos do mês civil, não uma fatura calculada.",12,MUTED,false);add(creditNote,0,10,0,0);
-        section("Investimentos","Carteira cadastrada no app");long invested=0,current=0;
-        for(Models.Investment i:store.investments()){invested=Math.addExact(invested,i.investedCents);current=Math.addExact(current,i.currentCents);}
+        section("Investimentos","Organize por tipo, liquidez, vencimento ou valor aplicado");long invested=0,current=0;
+        List<Models.Investment> investmentRows=store.investments();
+        for(Models.Investment i:investmentRows){invested=Math.addExact(invested,i.investedCents);current=Math.addExact(current,i.currentCents);}
         LinearLayout summary=box(colors.surfaceAlt);summary.addView(text("TOTAL DOS INVESTIMENTOS CADASTRADOS",11,GREEN,true));addTo(summary,text(money(current),27,GREEN,true),0,8,0,6);summary.addView(text("Aplicado: "+money(invested)+"\nRentabilidade simples: "+money(current-invested)+" · "+returnPercent(invested,current),13,GREEN,false));content.addView(summary);
-        for(Models.Investment i:store.investments()){LinearLayout card=box(WHITE);card.addView(text(i.name+(i.ticker.isEmpty()?"":" · "+i.ticker),15,TEXT,true));
-            addTo(card,text(i.kind+"  ·  Atual: "+money(i.currentCents),13,TEXT,false),0,7,0,0);
+        int investmentOrder=Math.max(0,Math.min(3,getPreferences(0).getInt("investment_order",0)));
+        Spinner order=select(content,"Organizar investimentos por",new String[]{"Tipo","Liquidez","Vencimento / validade","Valor aplicado (maior primeiro)"},investmentOrder);
+        order.setOnItemSelectedListener(selected(()->{int chosen=order.getSelectedItemPosition();if(chosen>=0&&chosen!=getPreferences(0).getInt("investment_order",0)){getPreferences(0).edit().putInt("investment_order",chosen).apply();render();}}));
+        investmentRows.sort(investmentOrder(investmentOrder));String lastGroup="";
+        if(investmentRows.isEmpty())add(text("Nenhum investimento cadastrado. Adicione uma posição para organizar sua carteira.",13,MUTED,false),0,16,0,0);
+        for(Models.Investment i:investmentRows){
+            String group=investmentOrder==0?(i.kind.isEmpty()?"Tipo não informado":i.kind):investmentOrder==1?liquidityName(i.liquidity):"";
+            if(!group.isEmpty()&&!normalize(group).equals(lastGroup)){add(text(group,17,GREEN,true),0,22,0,4);lastGroup=normalize(group);}
+            LinearLayout card=box(WHITE);card.addView(text(i.name+(i.ticker.isEmpty()?"":" · "+i.ticker),15,TEXT,true));
+            addTo(card,text("Tipo: "+(i.kind.isEmpty()?"Não informado":i.kind)+"\nAplicado: "+money(i.investedCents)+"  ·  Atual: "+money(i.currentCents),13,TEXT,false),0,7,0,0);
+            addTo(card,text("Liquidez: "+liquidityName(i.liquidity)+"\nVencimento / validade: "+investmentMaturity(i.maturityDate),12,MUTED,false),0,7,0,0);
             addTo(card,text("Rentabilidade simples: "+money(i.currentCents-i.investedCents)+" · "+returnPercent(i.investedCents,i.currentCents),13,i.currentCents<i.investedCents?RED:colors.income,true),0,7,0,0);
-            addTo(card,text(investmentQuoteLabel(i),12,MUTED,false),0,9,0,0);card.setContentDescription("Editar investimento "+i.name+", "+money(i.currentCents)+", rentabilidade simples "+returnPercent(i.investedCents,i.currentCents));card.setBackground(feedback(WHITE,20));card.setOnClickListener(v->editInvestment(i));add(card,0,10,0,0);}
+            addTo(card,text(investmentQuoteLabel(i),12,MUTED,false),0,9,0,0);card.setContentDescription("Editar investimento "+i.name+", aplicado "+money(i.investedCents)+", atual "+money(i.currentCents)+", liquidez "+liquidityName(i.liquidity)+", vencimento "+investmentMaturity(i.maturityDate)+", rentabilidade simples "+returnPercent(i.investedCents,i.currentCents));card.setBackground(feedback(WHITE,20));card.setOnClickListener(v->editInvestment(i));add(card,0,10,0,0);}
         Button invest=button("+ Adicionar investimento",GREEN,colors.onPrimary);invest.setOnClickListener(v->editInvestment(null));add(invest,0,14,0,0);
         add(text("O total é recalculado com os valores de cada investimento, incluindo cotações configuradas e valores manuais. A rentabilidade simples não representa retorno do período, não inclui proventos e não é anualizada. Aportes e resgates também precisam dos lançamentos na conta.",12,MUTED,false),0,10,0,0);
         b3Summary(true);
     }
+
+    private String liquidityName(String key){return INVESTMENT_LIQUIDITY_NAMES[indexOf(INVESTMENT_LIQUIDITY_KEYS,key)];}
+    private String investmentMaturity(String date){return date.isEmpty()?"Não informado":LocalDate.parse(date).format(DateTimeFormatter.ofPattern("dd/MM/yyyy"));}
+    private Comparator<Models.Investment> investmentOrder(int order){return (a,b)->{
+        int compared=0;
+        if(order==0){String left=normalize(a.kind),right=normalize(b.kind);compared=left.isEmpty()!=right.isEmpty()?(left.isEmpty()?1:-1):left.compareTo(right);}
+        else if(order==1){int left=indexOf(INVESTMENT_LIQUIDITY_KEYS,a.liquidity),right=indexOf(INVESTMENT_LIQUIDITY_KEYS,b.liquidity);compared=Integer.compare(left==0?5:left,right==0?5:right);}
+        else if(order==2)compared=a.maturityDate.isEmpty()!=b.maturityDate.isEmpty()?(a.maturityDate.isEmpty()?1:-1):a.maturityDate.compareTo(b.maturityDate);
+        else compared=Long.compare(b.investedCents,a.investedCents);
+        if(compared==0)compared=a.name.compareToIgnoreCase(b.name);return compared!=0?compared:Long.compare(a.id,b.id);
+    };}
 
     private String returnPercent(long invested,long current){if(hidden)return "••••%";if(invested==0)return "Percentual indisponível";return java.math.BigDecimal.valueOf(current).subtract(java.math.BigDecimal.valueOf(invested)).multiply(java.math.BigDecimal.valueOf(100)).divide(java.math.BigDecimal.valueOf(invested),2,java.math.RoundingMode.HALF_UP).toPlainString().replace('.',',')+"%";}
     private String quoteTime(String time){try{return java.time.Instant.parse(time).atZone(java.time.ZoneId.systemDefault()).format(DateTimeFormatter.ofPattern("dd/MM/yyyy HH:mm"));}catch(java.time.DateTimeException ex){return "Horário indisponível";}}
@@ -424,6 +447,8 @@ public final class MainActivity extends Activity {
         section("Aparência","Escolha como prefere visualizar o app");
         action("Aparência",appearanceLabel(AppAppearance.getMode(this))+" · sua escolha fica salva neste aparelho.",this::chooseAppearance);
         section("Acesso rápido","Suas preferências e organização");
+        action("Bloquear aplicativo","Exigir senha ou biometria para continuar.",()->{AuthSession.lock();startActivity(new Intent(this,LoginActivity.class).putExtra("return_to_activity",true));});
+        action("Meu Pluggy","Conectar sua conta pessoal, consultar e revisar transações.",()->startActivity(new Intent(this,PluggyActivity.class)));
         action("Notificações de transações","Escolha os apps, ative a captura e revise antes de salvar.",()->{page=5;render();});
         action("Gerenciar categorias","Criar, buscar, editar ou excluir em uma tela própria.",()->{page=4;render();});
         section("Seus dados","Arquivos sob seu controle");
@@ -432,7 +457,7 @@ public final class MainActivity extends Activity {
         action("Exportar lançamentos em CSV","Para consultar em uma planilha.",()->createDocument(CSV,"text/csv","myfinancehub-lancamentos-"+LocalDate.now()+".csv"));
         action("Salvar backup completo","JSON sem criptografia. Guarde em local seguro.",()->createDocument(BACKUP,"application/json","myfinancehub-backup-"+LocalDate.now()+".json"));
         action("Restaurar backup","Substitui os dados locais após confirmação.",()->new AlertDialog.Builder(this).setTitle("Restaurar um backup?").setMessage("O arquivo válido substituirá todos os dados atuais. Antes, salve um backup do estado atual. Use apenas um arquivo JSON exportado pelo MyFinanceHub.").setNegativeButton("Cancelar",null).setPositiveButton("Escolher arquivo",(d,w)->chooseDocument(RESTORE)).show());
-        add(text("MyFinanceHub · versão "+appVersion()+"\nSeus dados financeiros ficam no armazenamento privado do app. Cotações opcionais consultam códigos de ativos pela internet. Sem anúncios ou rastreamento. Desinstalar apaga os dados locais; exporte um backup antes.",12,MUTED,false),0,22,0,0);
+        add(text("MyFinanceHub · versão "+appVersion()+"\nSeus dados financeiros ficam no armazenamento privado do app. Cotações e consulta pessoal Meu Pluggy usam internet quando configuradas. Sem anúncios ou rastreamento. Desinstalar apaga os dados locais; exporte um backup antes.",12,MUTED,false),0,22,0,0);
     }
     private String appearanceLabel(AppAppearance.Mode mode){return mode==AppAppearance.Mode.LIGHT?"Claro":mode==AppAppearance.Mode.DARK?"Escuro":"Seguir o sistema";}
     private void chooseAppearance(){
@@ -602,13 +627,18 @@ public final class MainActivity extends Activity {
     private void editInvestment(Models.Investment old){LinearLayout form=form();EditText name=field(form,"Nome do investimento",old==null?"":old.name,InputType.TYPE_CLASS_TEXT);
         EditText ticker=field(form,"Código / ticker (opcional)",old==null?"":old.ticker,InputType.TYPE_CLASS_TEXT|InputType.TYPE_TEXT_FLAG_CAP_CHARACTERS);
         EditText kind=field(form,"Tipo (ex.: CDB, ação, Tesouro)",old==null?"":old.kind,InputType.TYPE_CLASS_TEXT);
+        Spinner liquidity=select(form,"Liquidez",INVESTMENT_LIQUIDITY_NAMES,old==null?0:indexOf(INVESTMENT_LIQUIDITY_KEYS,old.liquidity));
+        EditText maturity=field(form,"Vencimento / validade (opcional)",old==null?"":old.maturityDate,InputType.TYPE_NULL);maturity.setFocusable(false);
+        maturity.setOnClickListener(v->{LocalDate day=maturity.getText().toString().isEmpty()?LocalDate.now():LocalDate.parse(maturity.getText().toString());new DatePickerDialog(this,(picker,y,m,d)->maturity.setText(LocalDate.of(y,m+1,d).toString()),day.getYear(),day.getMonthValue()-1,day.getDayOfMonth()).show();});
+        Button clearMaturity=button("Limpar vencimento",colors.surfaceAlt,GREEN);clearMaturity.setOnClickListener(v->maturity.setText(""));form.addView(clearMaturity);
+        form.addView(text("Liquidez e vencimento são informações do seu contrato. Deixe sem informação quando não souber; cotações e posição B3 não preenchem esses dados automaticamente.",12,MUTED,false));
         EditText quantity=field(form,"Quantidade (opcional)",old==null?"":old.quantity.replace('.',','),InputType.TYPE_CLASS_NUMBER|InputType.TYPE_NUMBER_FLAG_DECIMAL);
         EditText invested=field(form,"Total aplicado (R$)",old==null?"":decimal(old.investedCents),InputType.TYPE_CLASS_NUMBER|InputType.TYPE_NUMBER_FLAG_DECIMAL);
         EditText current=field(form,"Valor atual (R$)",old==null?"":decimal(old.currentCents),InputType.TYPE_CLASS_NUMBER|InputType.TYPE_NUMBER_FLAG_DECIMAL);
         CheckBox automatic=new CheckBox(this);automatic.setText(R.string.quote_auto_position);automatic.setTextColor(TEXT);automatic.setContentDescription(getString(R.string.quote_auto_position));automatic.setMinHeight(dp(48));automatic.setChecked(old!=null&&old.autoQuote);addTo(form,automatic,0,12,0,8);
         form.addView(text("Informe o ticker e a quantidade, por exemplo PETR4 e 10, ou BTC-BRL e 0,01. A cotação recalcula quantidade × preço; o total aplicado permanece como custo. Configure a fonte e a atualização em Carteira → Cotações e atualização. Ativos sem cotação suportada continuam manuais.",12,MUTED,false));
         dialog(old==null?"Novo investimento":"Editar investimento",form,()->{
-            Models.Investment i=new Models.Investment();i.id=old==null?0:old.id;i.name=name.getText().toString().trim();i.ticker=ticker.getText().toString().trim().toUpperCase(Locale.ROOT);i.kind=kind.getText().toString().trim();
+            Models.Investment i=new Models.Investment();i.id=old==null?0:old.id;i.name=name.getText().toString().trim();i.ticker=ticker.getText().toString().trim().toUpperCase(Locale.ROOT);i.kind=kind.getText().toString().trim();i.liquidity=INVESTMENT_LIQUIDITY_KEYS[liquidity.getSelectedItemPosition()];i.maturityDate=maturity.getText().toString().trim();
             String exact=quantity.getText().toString().trim().replace(',','.');if(!exact.isEmpty()&&!exact.matches("[0-9]{1,24}(\\.[0-9]{1,8})?"))throw new IllegalArgumentException("Informe a quantidade sem separador de milhares, com até 8 casas decimais.");
             i.quantity=exact.isEmpty()?"":new java.math.BigDecimal(exact).stripTrailingZeros().toPlainString();i.autoQuote=automatic.isChecked();i.investedCents=invested.getText().toString().trim().isEmpty()?0:Money.parseCents(invested.getText().toString());i.currentCents=current.getText().toString().trim().isEmpty()?0:Money.parseCents(current.getText().toString());
             synchronized(store){if(old!=null&&i.ticker.equals(old.ticker)&&i.quantity.equals(old.quantity)&&i.currentCents==old.currentCents){for(Models.Investment fresh:store.investments())if(fresh.id==old.id&&fresh.ticker.equals(i.ticker)&&fresh.quantity.equals(i.quantity)){i.currentCents=fresh.currentCents;i.quotePrice=fresh.quotePrice;i.quoteAt=fresh.quoteAt;i.quoteSource=fresh.quoteSource;break;}}

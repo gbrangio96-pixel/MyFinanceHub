@@ -1,12 +1,12 @@
 # MyFinanceHub para Android
 
-Organizador de finanças pessoais em português. Contas, lançamentos, categorias, importações e relatórios funcionam no aparelho, sem login. A versão 0.5.1 preserva relatórios e cotações da 0.5.0, restaura sugestões por notificações e exige revisão e confirmação no aplicativo antes de gravar lançamentos.
+Organizador de finanças pessoais em português. Contas, lançamentos, categorias, importações e relatórios funcionam no aparelho, com acesso local protegido. A versão 0.6.0 acrescenta acesso local com senha/biometria, consulta pessoal Meu Pluggy e organização de investimentos por tipo, liquidez, vencimento e valor aplicado. Preserva relatórios, cotações, notificações e a confirmação obrigatória antes de gravar lançamentos.
 
 ## Instalar no celular
 
-APK: [`artifacts/MyFinanceHub-0.5.1-debug.apk`](artifacts/MyFinanceHub-0.5.1-debug.apk). Requer **Android 8.0 ou superior**. Esta versão tem uma única edição, código de versão 8. A captura de notificações é opcional e local; não há integração com WhatsApp nem transcrição de áudio.
+APK: [`artifacts/MyFinanceHub-0.6.0-release.apk`](artifacts/MyFinanceHub-0.6.0-release.apk). Requer **Android 8.0 ou superior**. Esta versão tem uma única edição, código de versão 9. A captura de notificações é opcional e local; não há integração com WhatsApp nem transcrição de áudio.
 
-Exporte um backup na versão instalada, se ela abrir, e instale o APK por cima, **sem desinstalar**. O pacote `br.com.myfinancehub` e a assinatura de desenvolvimento são mantidos. O banco v3 recebe migração aditiva das versões v1/v2; backups novos são v3 e a restauração aceita v1, v2 e v3. Não abra esse banco em versões antigas do aplicativo.
+Exporte um backup na versão instalada, se ela abrir, e instale o APK por cima, **sem desinstalar**. O pacote `br.com.myfinancehub` e a assinatura de desenvolvimento são mantidos. O banco v4 recebe migração aditiva das versões v1/v2/v3; backups novos são v4 e a restauração aceita v1, v2, v3 e v4. Não abra esse banco em versões antigas do aplicativo.
 
 1. Transfira o APK para o celular e abra o arquivo. Autorize a instalação pelo aplicativo de arquivos, se o Android solicitar.
 2. Confira os dados existentes depois da atualização. Na primeira instalação, a conta “Principal” começa vazia; configure contas e cartões em **Carteira**.
@@ -14,7 +14,7 @@ Exporte um backup na versão instalada, se ela abrir, e instale o APK por cima, 
 4. Em **Relatórios**, escolha período e conta para consultar entradas, despesas e resultado, salvar PDF/CSV ou compartilhar um PDF.
 5. Em **Ajustes → Aparência**, escolha **Seguir o sistema**, **Claro** ou **Escuro**.
 
-É um APK de testes assinado com chave de desenvolvimento, não uma publicação na Play Store. Preserve a chave e o identificador para futuras atualizações. **Desinstalar apaga os dados locais.** Se houver falha de instalação, mantenha a instalação atual e registre a mensagem. Mantenha as proteções do aparelho ativadas; a aceitação desta versão no Samsung S22 Ultra depende de verificação nesse aparelho.
+É um APK de distribuição sem depuração, assinado com a chave anterior para permitir atualização. Essa assinatura é a de desenvolvimento preservada; não constitui publicação na Play Store. Preserve a chave e o identificador para futuras atualizações. **Desinstalar apaga os dados locais.** Se houver falha de instalação, mantenha a instalação atual e registre a mensagem. Mantenha as proteções do aparelho ativadas; a aceitação desta versão no Samsung S22 Ultra depende de verificação nesse aparelho.
 
 ## Organização do app
 
@@ -29,6 +29,24 @@ Exporte um backup na versão instalada, se ela abrir, e instale o APK por cima, 
 Categorias podem ser criadas, buscadas, editadas e excluídas em **Lançamentos → Gerenciar categorias** ou em **Ajustes**. Excluir uma categoria preserva seus lançamentos. Também é possível criar uma categoria dentro do formulário de lançamento sem perder o preenchimento.
 
 Busca e posição de rolagem são preservadas por tela. As listas de lançamentos e posições B3 começam com 30 resultados e oferecem **Mostrar mais**. A opção **Ocultar valores** acompanha as telas e o conteúdo acessível. A aparência escolhida fica salva neste aparelho e não integra o backup financeiro.
+
+## Senha e biometria locais
+
+Na primeira abertura, crie um login local e uma senha de 8 a 128 caracteres, com maiúscula, minúscula, número e caractere especial. A senha não é enviada a um serviço: o aparelho guarda somente sua derivação PBKDF2-HMAC-SHA256 com sal aleatório. Após cinco erros há bloqueio temporário. Ao sair para outro aplicativo, o acesso é bloqueado novamente.
+
+Guarde o **código de recuperação** exibido uma vez em um gerenciador de senhas ou fora do aparelho. Ele permite trocar a senha sem apagar os dados e é renovado após recuperação. Não há conta online, recuperação por e-mail nem sincronização financeira entre celulares. Android 9 ou posterior pode oferecer biometria forte cadastrada no sistema, opcional e vinculada ao Android Keystore. Android 8 usa senha. Alterar a biometria do aparelho pode exigir nova ativação pelo login com senha.
+
+O bloqueio protege a interface; não adiciona criptografia própria ao banco financeiro. O Android mantém os arquivos no armazenamento privado do aplicativo. Backups exportados continuam sem criptografia; login, senhas, biometria e credenciais Meu Pluggy não são exportados.
+
+## Conectar sua conta Meu Pluggy
+
+Em **Ajustes → Meu Pluggy**, abra o portal oficial para autorizar bancos. Ter uma conta no Meu Pluggy não disponibiliza automaticamente a chave da API: espelhe suas conexões no Dashboard pelo conector **MeuPluggy** e preencha Client ID, Client Secret e os IDs dos itens no próprio aplicativo. Nunca envie essas credenciais no chat. Consulte o [passo a passo](docs/OPEN-FINANCE.md).
+
+A consulta pessoal usa diretamente `https://api.pluggy.ai`, sem hospedagem própria. As credenciais do titular são criptografadas no aparelho com Android Keystore; nenhuma chave particular integra o APK ou o Git. Use somente aplicação/itens próprios. A gratuidade, os limites de conexões e a cobertura dependem das condições do provedor. O app não cria conta paga nem contrata serviço.
+
+Salve a configuração e toque **Consultar transações**, ou mantenha **Consultar ao entrar no aplicativo**. Escolha até 90 dias. O Meu Pluggy costuma atualizar conexões a cada 24 horas; a consulta não força atualização. A resposta inclui contas, saldos informados, transações e horários/status do provedor. Saldo informado não substitui saldo local. Pendências ficam separadas e não podem ser salvas.
+
+Para salvar uma transação confirmada, escolha explicitamente conta/cartão local, classifique categoria e forma, revise e confirme. A mesma origem não pode ser gravada duas vezes, mesmo após trocar a conta local. CSV, notificações e conexões recriadas ainda exigem reconciliação. A consulta não importa investimentos nem modifica a posição B3.
 
 ## Notificações e confirmação
 
@@ -66,9 +84,9 @@ Uma falha preserva o último preço e seu horário. Cotações antigas continuam
 
 ## Dados, saldos e cartões
 
-O SQLite fica no armazenamento privado do aplicativo. Valores financeiros usam centavos inteiros; multiplicações de quantidade e preço usam decimais exatos. Não há anúncios ou telemetria. A permissão `INTERNET` atende somente às consultas opcionais de mercado. Controles financeiros e relatórios não dependem dela nem de um backend.
+O SQLite fica no armazenamento privado do aplicativo. Valores financeiros usam centavos inteiros; multiplicações de quantidade e preço usam decimais exatos. Não há anúncios ou telemetria. A permissão `INTERNET` atende às consultas opcionais de mercado e à API pessoal Meu Pluggy configurada pelo titular. Controles financeiros e relatórios não dependem dela nem de um backend.
 
-O armazenamento não possui senha ou criptografia própria do app; proteja o aparelho com bloqueio de tela. Backups JSON, CSV e PDF exportados não são criptografados. O backup automático do Android está desativado. A chave do provedor, preferências e cache de cotações não fazem parte do backup financeiro; os dados de cotação já aplicados a investimentos cadastrados fazem parte do backup v3.
+O armazenamento não possui senha ou criptografia própria do app; proteja o aparelho com bloqueio de tela. Backups JSON, CSV e PDF exportados não são criptografados. O backup automático do Android está desativado. A chave do provedor, preferências e cache de cotações não fazem parte do backup financeiro; os dados de cotação já aplicados a investimentos cadastrados fazem parte do backup v4.
 
 O saldo de uma conta é seu saldo inicial, mais entradas e menos saídas **fora do crédito**. Compras e estornos no crédito ficam associados ao cartão e não alteram o caixa. Ao pagar a fatura, cadastre uma **saída** na conta debitada com a forma **Pagamento de fatura**: ela reduz o saldo sem repetir a despesa no resultado. Ao importar extratos genéricos, revise essa forma manualmente.
 
@@ -110,7 +128,7 @@ Identificadores `FITID`/`id` detectam reimportações na mesma conta. Sem identi
 
 PDF, fotos e formatos proprietários não são suportados. O CSV serve para planilhas e protege campos textuais contra fórmulas. O **backup JSON** preserva os dados originais e todos os vínculos, com limite de 8 MiB por backup nesta versão. Bases maiores exigem exportação CSV e não têm restauração integral suportada. Restaurar exige confirmação e substitui todo o conteúdo atual de forma transacional; backups inválidos são rejeitados sem apagar a base.
 
-Consulte o [registro de validação da 0.5.1](docs/VALIDACAO-0.5.1.md) para testes, atualização no emulador e limites da verificação.
+Consulte o [registro de validação da 0.6.0](docs/VALIDACAO-0.6.0.md) para testes, atualização no emulador e limites da verificação.
 
 ## Desenvolvimento
 
@@ -137,8 +155,8 @@ Comandos individuais:
 `verify.sh` executa testes, lint e build da única edição. APK gerado: `app/build/outputs/apk/debug/app-debug.apk`. Relatórios dos verificadores: `app/build/reports/`. Para atualizar a cópia distribuível após concluir a validação:
 
 ```sh
-cp app/build/outputs/apk/debug/app-debug.apk artifacts/MyFinanceHub-0.5.1-debug.apk
-sha256sum artifacts/MyFinanceHub-0.5.1-debug.apk > artifacts/MyFinanceHub-0.5.1-debug.apk.sha256
+cp app/build/outputs/apk/release/app-release.apk artifacts/MyFinanceHub-0.6.0-release.apk
+sha256sum artifacts/MyFinanceHub-0.6.0-release.apk > artifacts/MyFinanceHub-0.6.0-release.apk.sha256
 ```
 
 No Android Studio, configure JDK compatível e SDK 35. `local.properties`, chaves e saídas de build são ignorados. Os testes substituem as consultas de mercado por respostas fictícias: montar e validar o APK não exige chave brapi, credenciais bancárias ou backend. A validação HTTPS opcional usa apenas símbolos públicos, sem dados pessoais.
@@ -156,4 +174,4 @@ O Android não está conectado a esse backend. A execução real depende de cada
 
 Siga o [roteiro de testes no Android](docs/TESTES-NO-CELULAR.md) para verificar atualização preservando dados, temas, importações, relatórios, compartilhamento e cotações. O roteiro é uma lista de verificações, não uma declaração de testes já realizados no seu aparelho.
 
-Bancos, pagamentos Pix, integração direta com carteiras e sincronização automática da custódia B3 não estão conectados ao APK. Notificações compatíveis geram somente sugestões para revisão; WhatsApp e transcrição não estão integrados. Documentos de validação de versões antigas permanecem como histórico; não descrevem as opções da 0.5.1.
+A leitura pessoal de contas e transações Meu Pluggy está implementada; requer credenciais e conexões autorizadas do titular. Pagamentos Pix, integração direta com carteiras e sincronização automática da custódia B3 não estão implementados. Notificações compatíveis geram somente sugestões para revisão; WhatsApp e transcrição não estão integrados. Documentos de validação de versões antigas permanecem como histórico; não descrevem as opções da 0.6.0.

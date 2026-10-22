@@ -2,7 +2,7 @@
 
 Backend HTTP de leitura, preparado para Cloudflare Workers com módulos ECMAScript. Consulta contas e transações dos `itemId` explicitamente configurados e devolve um snapshot normalizado. Usa `fetch` padrão e autenticação real da API Pluggy; os testes substituem a rede por respostas fictícias.
 
-**Estado da entrega:** não publicado, sem conta configurada, sem credenciais reais e sem ligação com o Android. Não inicia pagamentos, não altera o SQLite do aplicativo e não fornece uma atualização de APK. As telas da versão 0.3.0 permanecem iguais.
+**Estado atual:** backend alternativo não publicado, sem credenciais reais. O Android 0.6.0 possui consulta pessoal direta à API Pluggy e não depende de hospedar este Worker. Este backend permanece somente leitura, sem alterar o SQLite do app. O guia atual está em [docs/OPEN-FINANCE.md](../docs/OPEN-FINANCE.md).
 
 Para o cadastro pessoal, autorização dos bancos e limitações de Pix/carteiras, leia [docs/OPEN-FINANCE.md](../docs/OPEN-FINANCE.md).
 

@@ -192,7 +192,7 @@ public final class InvestmentQuoteStoreTest {
     @Test public void backupThreeRoundTripsAllQuoteFieldsAndDoesNotInventPortfolioCash() {
         Models.Investment investment = holding("0010.25000000", true); quote(investment, "100.1234", TIME);
         String backup = store.exportBackup();
-        assertEquals(3, json(backup).optInt("version"));
+        assertEquals(4, json(backup).optInt("version"));
         store.deleteInvestment(investment.id); store.restoreBackup(backup);
         assertEquals(backup, store.exportBackup()); assertEquals(investment.id, first().id);
         assertEquals("10.25", first().quantity); assertEquals("100.1234", first().quotePrice);
@@ -248,7 +248,7 @@ public final class InvestmentQuoteStoreTest {
         assertEquals("", first().quotePrice); assertFalse(first().autoQuote);
         assertEquals(123, store.b3Snapshot().totalCents());
         try (SQLiteDatabase migrated = context.openOrCreateDatabase("myfinancehub.db", Context.MODE_PRIVATE, null)) {
-            assertEquals(3, migrated.getVersion());
+            assertEquals(4, migrated.getVersion());
         }
         Models.Investment next = holding("2", false); assertTrue(next.id > investment.id);
     }

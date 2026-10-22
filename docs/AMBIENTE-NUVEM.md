@@ -11,13 +11,13 @@ Linux x86_64, Python 3, curl, tar, unzip e utilitários de checksum são necess�
 ./scripts/verify.sh
 ```
 
-O instalador confere os downloads e prepara JDK 21, Gradle 8.11.1, SDK 35 e caches em `/workspace/.myfinancehub-tools`, fora do Git. Pode ser repetido. `verify.sh` executa `testDebugUnitTest`, `lintDebug` e `assembleDebug`. A 0.5.1 tem uma única edição com captura opcional de notificações; os flavors antigos continuam removidos. Consulte `app/build/reports/` e `app/build/test-results/`.
+O instalador confere os downloads e prepara JDK 21, Gradle 8.11.1, SDK 35 e caches em `/workspace/.myfinancehub-tools`, fora do Git. Pode ser repetido. `verify.sh` executa testes unitários, lintDebug/Release e assembleDebug/Release; valida assinatura, alinhamento e ausência de depuração no release. A 0.6.0 tem uma edição com senha/biometria locais e consulta pessoal Meu Pluggy; os flavors antigos continuam removidos. Consulte `app/build/reports/` e `app/build/test-results/`.
 
-APK gerado: `app/build/outputs/apk/debug/app-debug.apk`. A cópia de distribuição é `artifacts/MyFinanceHub-0.5.1-debug.apk`, acompanhada do SHA-256.
+APK de distribuição: `app/build/outputs/apk/release/app-release.apk`. A cópia de distribuição é `artifacts/MyFinanceHub-0.6.0-release.apk`, acompanhada do SHA-256.
 
 Preserve a chave de desenvolvimento em `/workspace/.myfinancehub-tools/android-user/debug.keystore` para atualizar instalações anteriores do pacote `br.com.myfinancehub`. Nunca a publique no Git ou em ZIPs. Salve backup financeiro antes de atualizar e instale por cima; não desinstale uma instalação com dados para resolver falhas.
 
-O banco/backup da 0.5.0 é v3, com migração aditiva das versões v1/v2. O app restaura backups v1, v2 e v3. Os dados de quantidade e da última cotação aplicada pertencem ao investimento; chave do provedor, preferências e cache de cotações não pertencem ao backup financeiro.
+O banco/backup da 0.6.0 é v4, com migração aditiva das versões v1/v2/v3. O app restaura backups v1, v2, v3 e v4. Os dados de quantidade e da última cotação aplicada pertencem ao investimento; chave do provedor, preferências e cache de cotações não pertencem ao backup financeiro.
 
 Os testes de cotações usam transporte substituível e fixtures fictícias, sem chamadas à API ou chaves. Cotações reais são opcionais: HTTP GET por HTTPS para `brapi.dev`, com chave privada fornecida pelo usuário somente no app. Build, testes, controle financeiro, importação e relatórios não dependem dessa chave. Não solicite segredo em conversa nem coloque chaves no APK, logs ou instruções salvas.
 

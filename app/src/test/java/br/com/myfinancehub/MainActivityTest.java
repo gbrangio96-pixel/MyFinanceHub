@@ -284,6 +284,24 @@ public final class MainActivityTest {
         assertEquals(-4235, store.totalBalance());
     }
 
+    @Test public void expenseRequiresReviewAndExplicitConfirmationAndBackPreservesDraft() {
+        tab("Lançamentos");clickText(screen(), "+  Novo lançamento");
+        AlertDialog form=dialog();edit(form,"Descrição").setText("Revisão obrigatória");edit(form,"Valor (R$)").setText("12,34");
+        form.getButton(-1).performClick();idle();
+        AlertDialog confirmation=dialog();assertTrue(form.isShowing());assertTrue(store.entries().isEmpty());
+        assertContains(confirmation.getWindow().getDecorView(),"Revisão obrigatória");
+        assertContains(confirmation.getWindow().getDecorView(),"R$ 12,34");
+        confirmation.getButton(-2).performClick();idle();
+        assertTrue(form.isShowing());assertTrue(store.entries().isEmpty());
+        assertEquals("12,34",edit(form,"Valor (R$)").getText().toString());
+        edit(form,"Valor (R$)").setText("56,78");form.getButton(-1).performClick();idle();
+        assertTrue(store.entries().isEmpty());confirmation=dialog();
+        assertContains(confirmation.getWindow().getDecorView(),"R$ 56,78");
+        confirmation.getButton(-1).performClick();idle();assertEquals(1,store.entries().size());
+        assertEquals(5678,store.entries().get(0).amountCents);
+        assertEquals(-5678,store.totalBalance());
+    }
+
     @Test public void invalidEntryDoesNotPersistAndCanBeCorrectedWithoutLosingForm() {
         tab("Lançamentos");
         clickText(screen(), "+  Novo lançamento");
@@ -484,6 +502,17 @@ public final class MainActivityTest {
         assertEquals(AppAppearance.Mode.DARK, AppAppearance.getMode(activity));
     }
 
+    @Test public void statementPreviewIncludesEveryExpenseBeyondTheFormerSampleWithoutSaving() throws Exception {
+        StringBuilder source=new StringBuilder("data;descricao;valor\n");
+        for(int i=1;i<=20;i++)source.append(LocalDate.now()).append(";Despesa ").append(i).append(";-1,00\n");
+        Method options=MainActivity.class.getDeclaredMethod("importOptions",String.class,String.class);options.setAccessible(true);options.invoke(activity,source.toString(),"vinte.csv");idle();
+        dialog().getButton(-1).performClick();drainWorker();AlertDialog preview=dialog();
+        android.widget.ListView list=(android.widget.ListView)byDescription(preview.getWindow().getDecorView(),"Todos os lançamentos da importação");
+        assertNotNull(list);assertEquals(21,list.getAdapter().getCount());
+        assertTrue(list.getAdapter().getItem(20).toString().contains("Despesa 20"));
+        assertTrue(store.entries().isEmpty());preview.getButton(-2).performClick();idle();assertTrue(store.entries().isEmpty());
+    }
+
     @Test public void statementPreviewRequiresConfirmationAndReimportDoesNotDuplicate() throws Exception {
         String source = "data;descricao;valor;categoria\n"
                 + LocalDate.now() + ";Mercado local;-45,67;Alimentação\n"
@@ -496,7 +525,7 @@ public final class MainActivityTest {
         drainWorker();
         AlertDialog preview = dialog();
         assertContains(preview.getWindow().getDecorView(), "2 lançamentos encontrados");
-        assertContains(preview.getWindow().getDecorView(), "Mercado local");
+        assertImportContains(preview,"Mercado local");
         assertTrue(store.entries().isEmpty());
         preview.getButton(AlertDialog.BUTTON_NEGATIVE).performClick();
         assertTrue(store.entries().isEmpty());
@@ -578,9 +607,9 @@ public final class MainActivityTest {
 
         dialog().getButton(AlertDialog.BUTTON_POSITIVE).performClick();
         drainWorker();
-        assertContains(dialog().getWindow().getDecorView(), "Café e pão");
-        assertContains(dialog().getWindow().getDecorView(), "R$ 12,34");
-        assertContains(dialog().getWindow().getDecorView(), "Alimentação");
+        assertImportContains(dialog(),"Café e pão");
+        assertImportContains(dialog(),"R$ 12,34");
+        assertImportContains(dialog(),"Alimentação");
         assertTrue("Reading and preview must not modify the database", store.entries().isEmpty());
 
         dialog().getButton(AlertDialog.BUTTON_POSITIVE).performClick();
@@ -607,8 +636,8 @@ public final class MainActivityTest {
         assertContains(dialog().getWindow().getDecorView(), "extrato");
         dialog().getButton(AlertDialog.BUTTON_POSITIVE).performClick();
         drainWorker();
-        assertContains(dialog().getWindow().getDecorView(), "Farmácia São João");
-        assertContains(dialog().getWindow().getDecorView(), "R$ 28,90");
+        assertImportContains(dialog(),"Farmácia São João");
+        assertImportContains(dialog(),"R$ 28,90");
         dialog().getButton(AlertDialog.BUTTON_NEGATIVE).performClick();
         idle();
         assertTrue(store.entries().isEmpty());
@@ -683,6 +712,13 @@ public final class MainActivityTest {
         return closed;
     }
 
+    private static void assertImportContains(AlertDialog preview,String text) {
+        android.widget.ListView list=(android.widget.ListView)byDescription(preview.getWindow().getDecorView(),"Todos os lançamentos da importação");
+        assertNotNull(list);
+        for(int i=1;i<list.getAdapter().getCount();i++)if(list.getAdapter().getItem(i).toString().replace('\u00a0',' ').replace('\u202f',' ').contains(text))return;
+        fail("Missing import row containing "+text);
+    }
+
     private View screen() { return activity.findViewById(android.R.id.content); }
     private void tab(String name) { clickClickable(byDescription(screen(), name)); idle(); }
     private void openCategories() {
@@ -754,6 +790,10 @@ public final class MainActivityTest {
     }
     private static void save(AlertDialog dialog) {
         dialog.getButton(AlertDialog.BUTTON_POSITIVE).performClick(); idle();
+        AlertDialog confirmation=ShadowAlertDialog.getLatestAlertDialog();
+        if(confirmation!=dialog && confirmation.isShowing() && "Confirmar e salvar".contentEquals(confirmation.getButton(-1).getText())) {
+            confirmation.getButton(-1).performClick();idle();
+        }
         assertFalse("Form did not save", dialog.isShowing());
     }
     private static void idle() { shadowOf(Looper.getMainLooper()).idle(); }

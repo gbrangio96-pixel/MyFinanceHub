@@ -1,0 +1,29 @@
+{
+  "version": "0.5.1",
+  "versionCode": 8,
+  "applicationId": "br.com.myfinancehub",
+  "baseCommit": "d5f09cc60d2ec40f8d916509c65dc3c7299069b8",
+  "date": "2026-10-22",
+  "tests": {
+    "tests": 293,
+    "failures": 0,
+    "errors": 0,
+    "skipped": 0
+  },
+  "lint": "No issues found.",
+  "build": "./scripts/verify.sh: BUILD SUCCESSFUL",
+  "apk": "artifacts/MyFinanceHub-0.5.1-debug.apk",
+  "apkBytes": 359549,
+  "sha256": "174a398a32596d4492b837629a509f1f09d9ea0038bda5a0104fbee45a200e46",
+  "certificateSha256": "3aed65b8149ccd92287cc1055b57a5ae6b909f12d9282ffab221c24a8dadb446",
+  "sameCertificateAs050": true,
+  "zipalign": true,
+  "financialSchemaChanged": false,
+  "backupFormatChanged": false,
+  "notificationStorage": "Separate SQLite v1, compatible with historical notification queue",
+  "physicalDeviceTested": false,
+  "emulatorUpdateTest": {
+    "completed": false,
+    "reason": "API35 cold boot without acceleration: Android system restarts and DeadSystemException before usable app storage/activity"
+  }
+}

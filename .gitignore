@@ -17,3 +17,5 @@ captures/
 node_modules/
 .wrangler/
 coverage/
+
+work/

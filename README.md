@@ -1,10 +1,10 @@
 # MyFinanceHub para Android
 
-Organizador de finanças pessoais em português. Contas, lançamentos, categorias, importações e relatórios funcionam no aparelho, sem login. A versão 0.5.0 acrescenta relatórios por período e conta, rentabilidade simples dos investimentos e consulta opcional de cotações pela brapi.
+Organizador de finanças pessoais em português. Contas, lançamentos, categorias, importações e relatórios funcionam no aparelho, sem login. A versão 0.5.1 preserva relatórios e cotações da 0.5.0, restaura sugestões por notificações e exige revisão e confirmação no aplicativo antes de gravar lançamentos.
 
 ## Instalar no celular
 
-APK: [`artifacts/MyFinanceHub-0.5.0-debug.apk`](artifacts/MyFinanceHub-0.5.0-debug.apk). Requer **Android 8.0 ou superior**. Esta versão tem uma única edição, código de versão 7. A captura de notificações foi removida; não há integração com WhatsApp nem transcrição de áudio.
+APK: [`artifacts/MyFinanceHub-0.5.1-debug.apk`](artifacts/MyFinanceHub-0.5.1-debug.apk). Requer **Android 8.0 ou superior**. Esta versão tem uma única edição, código de versão 8. A captura de notificações é opcional e local; não há integração com WhatsApp nem transcrição de áudio.
 
 Exporte um backup na versão instalada, se ela abrir, e instale o APK por cima, **sem desinstalar**. O pacote `br.com.myfinancehub` e a assinatura de desenvolvimento são mantidos. O banco v3 recebe migração aditiva das versões v1/v2; backups novos são v3 e a restauração aceita v1, v2 e v3. Não abra esse banco em versões antigas do aplicativo.
 
@@ -29,6 +29,14 @@ Exporte um backup na versão instalada, se ela abrir, e instale o APK por cima, 
 Categorias podem ser criadas, buscadas, editadas e excluídas em **Lançamentos → Gerenciar categorias** ou em **Ajustes**. Excluir uma categoria preserva seus lançamentos. Também é possível criar uma categoria dentro do formulário de lançamento sem perder o preenchimento.
 
 Busca e posição de rolagem são preservadas por tela. As listas de lançamentos e posições B3 começam com 30 resultados e oferecem **Mostrar mais**. A opção **Ocultar valores** acompanha as telas e o conteúdo acessível. A aparência escolhida fica salva neste aparelho e não integra o backup financeiro.
+
+## Notificações e confirmação
+
+Em **Ajustes → Notificações de transações**, selecione os apps, conceda acesso nas configurações do Android e ative a captura. Ela começa desligada em instalações novas. Somente novos alertas financeiros compatíveis dos apps selecionados viram sugestões locais; nada é gravado no livro financeiro automaticamente. O reconhecimento depende do texto enviado pelo banco/carteira.
+
+Em **Lançamentos → Revisar notificações**, confira a sugestão, escolha explicitamente a conta e ajuste os dados. No formulário manual ou de notificação, toque **Revisar**, confira o resumo e toque **Confirmar e salvar**. **Voltar à revisão** mantém o preenchimento sem gravar. Cancelar, voltar, fechar ou recriar a tela não confirma uma despesa. Importações mostram todos os registros para revisão e exigem o botão **Importar**.
+
+Sugestões são guardadas separadamente dos dados financeiros, por até 30 dias, com limite de 100. Não integram o backup JSON. A mesma origem de notificação não pode ser confirmada duas vezes, mesmo em contas diferentes; alertas de origens diferentes ainda podem exigir conciliação manual. A captura não usa rede nem registra o texto integral das notificações. Pause-a no app ou revogue o acesso no Android quando desejar.
 
 ## Relatórios
 
@@ -102,7 +110,7 @@ Identificadores `FITID`/`id` detectam reimportações na mesma conta. Sem identi
 
 PDF, fotos e formatos proprietários não são suportados. O CSV serve para planilhas e protege campos textuais contra fórmulas. O **backup JSON** preserva os dados originais e todos os vínculos, com limite de 8 MiB por backup nesta versão. Bases maiores exigem exportação CSV e não têm restauração integral suportada. Restaurar exige confirmação e substitui todo o conteúdo atual de forma transacional; backups inválidos são rejeitados sem apagar a base.
 
-Consulte o [registro de validação da 0.5.0](docs/VALIDACAO-0.5.0.md) para testes, atualização no emulador e limites da verificação.
+Consulte o [registro de validação da 0.5.1](docs/VALIDACAO-0.5.1.md) para testes, atualização no emulador e limites da verificação.
 
 ## Desenvolvimento
 
@@ -129,8 +137,8 @@ Comandos individuais:
 `verify.sh` executa testes, lint e build da única edição. APK gerado: `app/build/outputs/apk/debug/app-debug.apk`. Relatórios dos verificadores: `app/build/reports/`. Para atualizar a cópia distribuível após concluir a validação:
 
 ```sh
-cp app/build/outputs/apk/debug/app-debug.apk artifacts/MyFinanceHub-0.5.0-debug.apk
-sha256sum artifacts/MyFinanceHub-0.5.0-debug.apk > artifacts/MyFinanceHub-0.5.0-debug.apk.sha256
+cp app/build/outputs/apk/debug/app-debug.apk artifacts/MyFinanceHub-0.5.1-debug.apk
+sha256sum artifacts/MyFinanceHub-0.5.1-debug.apk > artifacts/MyFinanceHub-0.5.1-debug.apk.sha256
 ```
 
 No Android Studio, configure JDK compatível e SDK 35. `local.properties`, chaves e saídas de build são ignorados. Os testes substituem as consultas de mercado por respostas fictícias: montar e validar o APK não exige chave brapi, credenciais bancárias ou backend. A validação HTTPS opcional usa apenas símbolos públicos, sem dados pessoais.
@@ -148,4 +156,4 @@ O Android não está conectado a esse backend. A execução real depende de cada
 
 Siga o [roteiro de testes no Android](docs/TESTES-NO-CELULAR.md) para verificar atualização preservando dados, temas, importações, relatórios, compartilhamento e cotações. O roteiro é uma lista de verificações, não uma declaração de testes já realizados no seu aparelho.
 
-Bancos, pagamentos Pix, integração direta com carteiras e sincronização automática da custódia B3 não estão conectados ao APK. A captura de notificações e a ideia de WhatsApp foram retiradas desta etapa. Documentos de validação de versões antigas permanecem como histórico; não descrevem as opções da 0.5.0.
+Bancos, pagamentos Pix, integração direta com carteiras e sincronização automática da custódia B3 não estão conectados ao APK. Notificações compatíveis geram somente sugestões para revisão; WhatsApp e transcrição não estão integrados. Documentos de validação de versões antigas permanecem como histórico; não descrevem as opções da 0.5.1.

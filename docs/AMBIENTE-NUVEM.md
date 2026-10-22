@@ -11,9 +11,9 @@ Linux x86_64, Python 3, curl, tar, unzip e utilitários de checksum são necess�
 ./scripts/verify.sh
 ```
 
-O instalador confere os downloads e prepara JDK 21, Gradle 8.11.1, SDK 35 e caches em `/workspace/.myfinancehub-tools`, fora do Git. Pode ser repetido. `verify.sh` executa `testDebugUnitTest`, `lintDebug` e `assembleDebug`. A 0.5.0 tem uma única edição; os flavors de notificações foram removidos. Consulte `app/build/reports/` e `app/build/test-results/`.
+O instalador confere os downloads e prepara JDK 21, Gradle 8.11.1, SDK 35 e caches em `/workspace/.myfinancehub-tools`, fora do Git. Pode ser repetido. `verify.sh` executa `testDebugUnitTest`, `lintDebug` e `assembleDebug`. A 0.5.1 tem uma única edição com captura opcional de notificações; os flavors antigos continuam removidos. Consulte `app/build/reports/` e `app/build/test-results/`.
 
-APK gerado: `app/build/outputs/apk/debug/app-debug.apk`. A cópia de distribuição é `artifacts/MyFinanceHub-0.5.0-debug.apk`, acompanhada do SHA-256.
+APK gerado: `app/build/outputs/apk/debug/app-debug.apk`. A cópia de distribuição é `artifacts/MyFinanceHub-0.5.1-debug.apk`, acompanhada do SHA-256.
 
 Preserve a chave de desenvolvimento em `/workspace/.myfinancehub-tools/android-user/debug.keystore` para atualizar instalações anteriores do pacote `br.com.myfinancehub`. Nunca a publique no Git ou em ZIPs. Salve backup financeiro antes de atualizar e instale por cima; não desinstale uma instalação com dados para resolver falhas.
 

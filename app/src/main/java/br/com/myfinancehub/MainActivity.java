@@ -41,6 +41,7 @@ public final class MainActivity extends Activity {
     private static final String[] METHOD_KEYS={"other","pix","debit","credit","cash","transfer","card_payment"};
     private static final String[] METHOD_NAMES={"Outro / extrato","PIX (registro manual)","Débito","Crédito","Dinheiro","Transferência entre minhas contas","Pagamento de fatura"};
     private FinanceStore store;
+    private NotificationInbox notificationInbox;
     private LinearLayout root, content, navigation;
     private ScrollView screenScroll;
     private int renderedPage=-1;
@@ -84,6 +85,7 @@ public final class MainActivity extends Activity {
         BG=colors.background;GREEN=colors.primary;LIME=colors.accent;TEXT=colors.text;
         MUTED=colors.muted;LINE=colors.line;RED=colors.expense;WHITE=colors.surface;
         store=new FinanceStore(this);
+        notificationInbox=new NotificationInbox(this);
         hidden=getPreferences(0).getBoolean("hidden",false);
         if(state!=null){ page=state.getInt("page"); filter=state.getInt("filter");
             month=YearMonth.parse(state.getString("month",month.toString())); search=state.getString("search","");categorySearch=state.getString("categorySearch","");
@@ -92,7 +94,7 @@ public final class MainActivity extends Activity {
         if(state!=null){try{reportFrom=LocalDate.parse(state.getString("report_from",reportFrom.toString()));reportTo=LocalDate.parse(state.getString("report_to",reportTo.toString()));}catch(java.time.DateTimeException ignored){reportFrom=YearMonth.now().atDay(1);reportTo=YearMonth.now().atEndOfMonth();}
             reportPreset=Math.max(0,Math.min(3,state.getInt("report_preset",0)));reportAccountId=state.getLong("report_account",0);allReportCategories=state.getBoolean("report_all_categories",false);}
         Object retained=getLastNonConfigurationInstance();if(retained instanceof PendingReport)pendingReport=(PendingReport)retained;
-        if(page<0||page>=pageScroll.length||page==5)page=0;
+        if(page<0||page>=pageScroll.length)page=0;
         render();
     }
     @Override protected void onSaveInstanceState(Bundle state){
@@ -106,7 +108,7 @@ public final class MainActivity extends Activity {
     @Override public Object onRetainNonConfigurationInstance(){return pendingReport;}
     @Override protected void onResume(){super.onResume();if(AppAppearance.isDark(this)!=darkTheme){recreate();return;}if(firstResume)firstResume=false;else if(store!=null)render();quoteHandler.removeCallbacks(quoteTick);quoteHandler.post(quoteTick);}
     @Override protected void onPause(){quoteHandler.removeCallbacksAndMessages(null);quoteGeneration++;if(automaticQuoteTask!=null)automaticQuoteTask.cancel(true);quoteRefreshRunning=false;super.onPause();}
-    @Override protected void onDestroy(){quoteHandler.removeCallbacksAndMessages(null);if(activeProgress!=null)activeProgress.dismiss();worker.execute(()->store.close());worker.shutdown();super.onDestroy();}
+    @Override protected void onDestroy(){quoteHandler.removeCallbacksAndMessages(null);if(activeProgress!=null)activeProgress.dismiss();worker.execute(()->{store.close();notificationInbox.close();});worker.shutdown();super.onDestroy();}
 
     private void maybeAutomaticQuotes(){
         if(isFinishing()||isDestroyed()||quoteRefreshRunning||activeProgress!=null||!(page==0||page==2||page==6)||!InvestmentQuoteUpdater.isAutomaticRefreshDue(this))return;
@@ -135,7 +137,7 @@ public final class MainActivity extends Activity {
         ScrollView scroll=new ScrollView(this);scroll.setFillViewport(true);screenScroll=scroll;renderedPage=page;
         content=column();content.setPadding(dp(22),dp(8),dp(22),dp(28));scroll.addView(content);
         root.addView(scroll,new LinearLayout.LayoutParams(-1,0,1));
-        if(page==0)dashboard();else if(page==1)transactions();else if(page==2)wallet();else if(page==4)categories();else if(page==6)b3Screen();else if(page==7)reports();else settings();
+        if(page==0)dashboard();else if(page==1)transactions();else if(page==2)wallet();else if(page==4)categories();else if(page==5)notifications();else if(page==6)b3Screen();else if(page==7)reports();else settings();
         navigation=row();navigation.setBackgroundColor(WHITE);navigation.setPadding(dp(6),dp(6),dp(6),dp(6));
         String[] labels={"Painel","Lançamentos","Relatórios","Carteira","Ajustes"};int[] targets={0,1,7,2,3};
         for(int i=0;i<labels.length;i++){final int p=targets[i];boolean selected=p==page||page==4&&p==1||page==6&&p==2;LinearLayout item=column();item.setGravity(Gravity.CENTER);item.setPadding(0,dp(8),0,dp(6));
@@ -208,6 +210,7 @@ public final class MainActivity extends Activity {
         add.setContentDescription("Novo lançamento");imp.setContentDescription("Importar extrato");
         add.setOnClickListener(v->editEntry(null));imp.setOnClickListener(v->chooseDocument(IMPORT));
         actions.addView(add,new LinearLayout.LayoutParams(0,-2,1));Space s=new Space(this);actions.addView(s,new LinearLayout.LayoutParams(dp(8),1));actions.addView(imp,new LinearLayout.LayoutParams(0,-2,1));add(actions,0,16,0,12);
+        action("Revisar notificações ("+notificationInbox.pendingCount()+")","Sugestões só viram lançamentos após sua confirmação.",()->{page=5;render();});
         action("Gerenciar categorias","Criar, editar e excluir categorias.",()->{page=4;render();});monthSelector();monthlySummary();
         LinearLayout chips=row();String[] names={"Todos","Entradas","Saídas"};
         for(int i=0;i<3;i++){final int f=i;TextView chip=text(names[i],13,filter==i?colors.onPrimary:GREEN,true);chip.setGravity(Gravity.CENTER);chip.setPadding(dp(12),dp(12),dp(12),dp(12));chip.setMinHeight(dp(48));chip.setSelected(filter==i);chip.setContentDescription(names[i]);chip.setBackground(feedback(filter==i?GREEN:colors.surfaceAlt,16));chip.setOnClickListener(v->{if(filter!=f){filter=f;visibleEntries=PAGE_SIZE;render();}});
@@ -421,6 +424,7 @@ public final class MainActivity extends Activity {
         section("Aparência","Escolha como prefere visualizar o app");
         action("Aparência",appearanceLabel(AppAppearance.getMode(this))+" · sua escolha fica salva neste aparelho.",this::chooseAppearance);
         section("Acesso rápido","Suas preferências e organização");
+        action("Notificações de transações","Escolha os apps, ative a captura e revise antes de salvar.",()->{page=5;render();});
         action("Gerenciar categorias","Criar, buscar, editar ou excluir em uma tela própria.",()->{page=4;render();});
         section("Seus dados","Arquivos sob seu controle");
         action("Importar extrato CSV ou OFX","Escolha uma conta, revise e confirme os registros.",()->chooseDocument(IMPORT));
@@ -477,33 +481,108 @@ public final class MainActivity extends Activity {
         }catch(Exception ex){message(safeError(ex));}}));dialog.show();
     }
 
-    private void editEntry(Models.Entry original){
+    private void notifications(){
+        eyebrow("LEITURA OPCIONAL E LOCAL");title("Notificações");
+        add(text("Alertas reconhecidos viram sugestões. Você confere os dados e escolhe se deseja salvar cada lançamento.",13,MUTED,false),0,8,0,16);
+        boolean access=NotificationCaptureService.hasAccess(this);Set<String> packages=notificationInbox.allowedPackages();
+        LinearLayout status=box(colors.hero);status.addView(text(notificationInbox.isEnabled()&&access&&!packages.isEmpty()?"CAPTURA ATIVA":"CAPTURA PAUSADA",12,LIME,true));
+        addTo(status,text("Somente os apps escolhidos. Nenhum lançamento é salvo automaticamente.",12,colors.heroText,false),0,8,0,0);content.addView(status);
+        section("Começar","XP, Itaú, Mercado Pago e Samsung Wallet");
+        action("1. Escolher apps",packages.size()+" apps selecionados. Escolha apenas os que deseja acompanhar.",this::chooseNotificationApps);
+        action("2. Permitir acesso no Android",access?"Acesso concedido · toque para gerenciar.":"O Android solicitará sua autorização para ler notificações.",this::explainNotificationAccess);
+        Switch enabled=new Switch(this);enabled.setText(getString(R.string.capture_new_notifications));enabled.setTextColor(TEXT);enabled.setContentDescription("Capturar novas notificações");enabled.setPadding(0,dp(12),0,dp(12));enabled.setChecked(notificationInbox.isEnabled());enabled.setEnabled(notificationInbox.isEnabled()||access&&!packages.isEmpty());
+        enabled.setOnCheckedChangeListener((v,value)->{notificationInbox.setEnabled(value);render();});content.addView(enabled);
+        if(!access||packages.isEmpty())add(text("Escolha os apps e conceda o acesso antes de ligar a captura. Você pode continuar usando todo o controle manual e a importação de extratos.",12,MUTED,false),0,0,0,8);
+        Button refresh=button("Atualizar lista",WHITE,GREEN);refresh.setOnClickListener(v->render());add(refresh,0,12,0,0);
+        List<NotificationInbox.Candidate> pending=notificationInbox.pending();for(Iterator<NotificationInbox.Candidate> i=pending.iterator();i.hasNext();){NotificationInbox.Candidate candidate=i.next();if(store.hasNotificationSource(candidate.sourceKey)){notificationInbox.dismiss(candidate.id);i.remove();}}
+        section("Para revisar ("+pending.size()+")","Revise conta, valor, data, categoria e cartão");
+        if(pending.isEmpty()){LinearLayout empty=box(WHITE);empty(empty,"Nenhuma sugestão pendente","Depois de ativar, novos alertas financeiros compatíveis dos apps escolhidos aparecerão aqui. Não buscamos notificações antigas.");content.addView(empty);}
+        int shown=0;
+        for(NotificationInbox.Candidate candidate:pending){
+            LinearLayout card=box(WHITE);card.addView(text(candidate.appLabel+" · "+displayDate(candidate.date),12,MUTED,true));
+            addTo(card,text(candidate.description,16,TEXT,true),0,8,0,0);addTo(card,text((candidate.type.equals("income")?"+ ":"− ")+money(candidate.amountCents),21,candidate.type.equals("income")?GREEN:TEXT,true),0,8,0,0);
+            if(!candidate.lastFour.isEmpty())addTo(card,text("Cartão informado: final "+candidate.lastFour,12,MUTED,false),0,6,0,0);
+            LinearLayout actions=row();Button review=button("Revisar",GREEN,colors.onPrimary);review.setContentDescription("Revisar notificação "+candidate.id);review.setOnClickListener(v->reviewNotification(candidate));
+            Button dismiss=button("Descartar",WHITE,MUTED);dismiss.setContentDescription("Descartar notificação "+candidate.id);dismiss.setOnClickListener(v->{notificationInbox.dismiss(candidate.id);render();});
+            actions.addView(review,new LinearLayout.LayoutParams(0,-2,1));actions.addView(dismiss,new LinearLayout.LayoutParams(0,-2,1));addTo(card,actions,0,14,0,0);add(card,0,0,0,12);shown++;
+        }
+        add(text("O formato dos alertas varia por app e Android. Alertas ambíguos, ofertas, códigos de acesso e valores de saldo não são registrados. A data sugerida é a data do alerta: confira-a. Compras podem exigir escolher crédito ou débito. Sugestões ficam por até 30 dias (máximo 100).",12,MUTED,false),0,15,0,0);
+        if(shown>0){Button clear=button("Descartar todas as sugestões",WHITE,RED);clear.setOnClickListener(v->new AlertDialog.Builder(this).setTitle("Descartar sugestões?").setMessage("Seus lançamentos já salvos serão preservados.").setNegativeButton("Cancelar",null).setPositiveButton("Descartar",(d,w)->{notificationInbox.clearPending();render();}).show());add(clear,0,12,0,0);}
+        add(text("O backup JSON guarda os lançamentos confirmados. Sugestões e preferências de captura não entram no backup; após restaurar em outro aparelho, configure a captura novamente.",12,MUTED,false),0,15,0,0);
+    }
+    private void explainNotificationAccess(){
+        new AlertDialog.Builder(this).setTitle("Acesso às notificações")
+            .setMessage("O Android concede um acesso amplo às notificações, que podem conter mensagens e códigos pessoais. O MyFinanceHub filtra os apps que você escolher e só guarda dados resumidos de alertas financeiros reconhecidos, sem enviar nada pela internet. Você pode pausar a captura aqui ou revogar o acesso no Android.")
+            .setNegativeButton("Cancelar",null).setPositiveButton("Abrir configurações",(d,w)->{try{startActivity(NotificationCaptureService.accessSettingsIntent(this));}catch(android.content.ActivityNotFoundException ex){message("O acesso a notificações não está disponível neste aparelho.");}}).show();
+    }
+    @android.annotation.SuppressLint("QueryPermissionsNeeded")
+    private void chooseNotificationApps(){
+        android.content.pm.PackageManager manager=getPackageManager();Intent launcher=new Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LAUNCHER);
+        LinkedHashMap<String,String> available=new LinkedHashMap<>();
+        for(android.content.pm.ResolveInfo info:manager.queryIntentActivities(launcher,0))if(info.activityInfo!=null&&!getPackageName().equals(info.activityInfo.packageName))available.put(info.activityInfo.packageName,info.loadLabel(manager).toString());
+        Set<String> selectedPackages=new HashSet<>(notificationInbox.allowedPackages());for(String selected:selectedPackages)if(!available.containsKey(selected))available.put(selected,selected+" (não encontrado)");
+        ArrayList<Map.Entry<String,String>> apps=new ArrayList<>(available.entrySet());apps.sort((a,b)->{int first=Integer.compare(preferredApp(b.getValue())?1:0,preferredApp(a.getValue())?1:0);return first!=0?first:a.getValue().compareToIgnoreCase(b.getValue());});
+        if(apps.isEmpty()){message("Nenhum app foi encontrado. Instale ou habilite o aplicativo do banco ou carteira e tente novamente.");return;}
+        String[] names=new String[apps.size()];boolean[] checked=new boolean[apps.size()];for(int i=0;i<apps.size();i++){names[i]=apps.get(i).getValue();checked[i]=selectedPackages.contains(apps.get(i).getKey());}
+        new AlertDialog.Builder(this).setTitle("Apps para acompanhar").setMultiChoiceItems(names,checked,(d,index,value)->{if(value)selectedPackages.add(apps.get(index).getKey());else selectedPackages.remove(apps.get(index).getKey());})
+            .setNegativeButton("Cancelar",null).setPositiveButton("Salvar seleção",(d,w)->{notificationInbox.setAllowedPackages(selectedPackages);if(selectedPackages.isEmpty())notificationInbox.setEnabled(false);render();}).show();
+    }
+    private boolean preferredApp(String label){String normalized=normalize(label);return normalized.equals("xp")||normalized.startsWith("xp ")||normalized.contains("itau")||normalized.contains("mercado pago")||normalized.contains("samsung wallet")||normalized.contains("samsung pay");}
+    private void reviewNotification(NotificationInbox.Candidate candidate){
+        if(store.hasNotificationSource(candidate.sourceKey)){notificationInbox.dismiss(candidate.id);render();message("Esta notificação já foi registrada.");return;}
+        Models.Entry entry=new Models.Entry();entry.description=candidate.description;entry.date=candidate.date;entry.type=candidate.type;entry.method=candidate.method;entry.amountCents=candidate.amountCents;entry.sourceKey=candidate.sourceKey;
+        // Choosing the account remains an explicit step; only a unique last-four match is suggested.
+        int matches=0;for(Models.Card card:store.cards())if(!candidate.lastFour.isEmpty()&&card.lastFour.equals(candidate.lastFour)){entry.cardId=card.id;matches++;}if(matches!=1)entry.cardId=0;
+        entry.accountId=0;
+        boolean possibleDuplicate=false;for(Models.Entry saved:store.entries())if(saved.date.equals(entry.date)&&saved.type.equals(entry.type)&&saved.amountCents==entry.amountCents){possibleDuplicate=true;break;}
+        String warning=candidate.reviewNote+(candidate.lastFour.isEmpty()?"":" Cartão informado: final "+candidate.lastFour+".")+(possibleDuplicate?" Já existe um lançamento com a mesma data, tipo e valor: confira se é uma duplicata de extrato ou de outro alerta.":"");
+        new AlertDialog.Builder(this).setTitle("Revisar sugestão de "+candidate.appLabel).setMessage(warning).setNegativeButton("Cancelar",null).setPositiveButton("Conferir dados",(d,w)->editEntry(entry,()->notificationInbox.dismiss(candidate.id),candidate.method.equals("other"))).show();
+    }
+
+    private void editEntry(Models.Entry original){editEntry(original,null,false);}
+    private void editEntry(Models.Entry original,Runnable afterSave,boolean chooseMethod){
         Models.Entry e=original==null?new Models.Entry():original;LinearLayout form=form();
         EditText description=field(form,"Descrição",e.description==null?"":e.description,InputType.TYPE_CLASS_TEXT|InputType.TYPE_TEXT_FLAG_CAP_SENTENCES);
         EditText amount=field(form,"Valor (R$)",e.amountCents==0?"":decimal(e.amountCents),InputType.TYPE_CLASS_NUMBER|InputType.TYPE_NUMBER_FLAG_DECIMAL);
         Spinner type=select(form,"Tipo",new String[]{"Saída","Entrada"},"income".equals(e.type)?1:0);
         EditText date=field(form,"Data",e.date==null||e.date.isEmpty()?LocalDate.now().toString():e.date,InputType.TYPE_NULL);date.setFocusable(false);date.setOnClickListener(v->{LocalDate day=LocalDate.parse(date.getText());new DatePickerDialog(this,(p,y,m,d)->date.setText(LocalDate.of(y,m+1,d).toString()),day.getYear(),day.getMonthValue()-1,day.getDayOfMonth()).show();});
         List<Models.Account> accounts=store.accounts();if(accounts.isEmpty()){message("Adicione uma conta antes de lançar movimentações.");return;}
-        Spinner account=select(form,"Conta",accountNames(accounts),indexAccount(accounts,e.accountId));
+        boolean notificationReview=e.id==0&&e.sourceKey!=null&&e.sourceKey.startsWith("notification:");
+        String[] accountOptions=accountNames(accounts);if(notificationReview){String[] explicit=new String[accountOptions.length+1];explicit[0]="Escolha uma conta";System.arraycopy(accountOptions,0,explicit,1,accountOptions.length);accountOptions=explicit;}
+        Spinner account=select(form,"Conta",accountOptions,notificationReview?0:indexAccount(accounts,e.accountId));
         List<Models.Category> categories=store.categories();Spinner category=select(form,"Categoria",new String[]{"Sem categoria"},0);List<Models.Category> available=new ArrayList<>();long[] preferredCategory={e.categoryId};
         Runnable updateCategories=()->{available.clear();String direction=type.getSelectedItemPosition()==1?"income":"expense";ArrayList<String> labels=new ArrayList<>();labels.add("Sem categoria");int selected=0;
             for(Models.Category c:categories)if(c.type.equals("both")||c.type.equals(direction)){available.add(c);labels.add(c.name);if(c.id==preferredCategory[0])selected=available.size();}
             setItems(category,labels.toArray(new String[0]),selected);};
         type.setOnItemSelectedListener(selected(updateCategories));updateCategories.run();
         Button newCategory=button("+ Nova categoria",colors.surfaceAlt,GREEN);newCategory.setOnClickListener(v->quickCategory(type.getSelectedItemPosition()==1?"income":"expense",created->{preferredCategory[0]=created.id;categories.clear();categories.addAll(store.categories());updateCategories.run();}));form.addView(newCategory);
-        Spinner method=select(form,"Forma de pagamento",METHOD_NAMES,indexOf(METHOD_KEYS,e.method));
+        String[] methodOptions=METHOD_NAMES;if(chooseMethod){String[] explicit=new String[METHOD_NAMES.length+1];explicit[0]="Escolha a forma de pagamento";System.arraycopy(METHOD_NAMES,0,explicit,1,METHOD_NAMES.length);methodOptions=explicit;}
+        Spinner method=select(form,"Forma de pagamento",methodOptions,chooseMethod?0:indexOf(METHOD_KEYS,e.method));
         List<Models.Card> cards=store.cards();ArrayList<String> cardLabels=new ArrayList<>();cardLabels.add("Selecione um cartão");int selectedCard=0;
         for(Models.Card c:cards){cardLabels.add(c.name+" · "+c.lastFour);if(c.id==e.cardId)selectedCard=cardLabels.size()-1;}
         Spinner card=select(form,"Cartão (somente para crédito)",cardLabels.toArray(new String[0]),selectedCard);
         TextView hint=text("PIX é identificado manualmente. Compras no crédito não alteram o saldo da conta. Para quitar o cartão, use uma saída com a forma “Pagamento de fatura”.",12,MUTED,false);form.addView(hint);
-        dialog(original==null||e.id==0?"Novo lançamento":"Editar lançamento",form,()->{
+        AlertDialog editor=new AlertDialog.Builder(this).setTitle(original==null||e.id==0?"Novo lançamento":"Editar lançamento").setView(wrap(form)).setNegativeButton("Cancelar",null).setPositiveButton("Revisar",null).create();
+        if(e.id!=0)editor.setButton(AlertDialog.BUTTON_NEUTRAL,"Excluir",(d,w)->confirmDelete("Excluir este lançamento?",()->store.deleteEntry(e.id)));
+        editor.setOnShowListener(x->editor.getButton(-1).setOnClickListener(v->{try{
             Models.Entry updated=new Models.Entry();updated.id=e.id;updated.description=description.getText().toString().trim();updated.amountCents=Money.parseCents(amount.getText().toString());
-            updated.type=type.getSelectedItemPosition()==1?"income":"expense";updated.date=date.getText().toString();int selectedAccount=account.getSelectedItemPosition();updated.accountId=accounts.get(selectedAccount).id;
+            updated.type=type.getSelectedItemPosition()==1?"income":"expense";updated.date=date.getText().toString();int selectedAccount=account.getSelectedItemPosition()-(notificationReview?1:0);if(selectedAccount<0)throw new IllegalArgumentException("Escolha a conta deste lançamento antes de salvar.");updated.accountId=accounts.get(selectedAccount).id;
             updated.categoryId=category.getSelectedItemPosition()==0?0:available.get(category.getSelectedItemPosition()-1).id;
-            int selectedMethod=method.getSelectedItemPosition();if(selectedMethod<0)throw new IllegalArgumentException("Escolha a forma de pagamento. Confira se foi crédito ou débito.");updated.method=METHOD_KEYS[selectedMethod];updated.cardId=updated.method.equals("credit")&&card.getSelectedItemPosition()>0?cards.get(card.getSelectedItemPosition()-1).id:0;
+            int selectedMethod=method.getSelectedItemPosition()-(chooseMethod?1:0);if(selectedMethod<0)throw new IllegalArgumentException("Escolha a forma de pagamento. Confira se foi crédito ou débito.");updated.method=METHOD_KEYS[selectedMethod];updated.cardId=updated.method.equals("credit")&&card.getSelectedItemPosition()>0?cards.get(card.getSelectedItemPosition()-1).id:0;
             if(updated.method.equals("credit")&&updated.cardId==0)throw new IllegalArgumentException("Selecione um cartão cadastrado para lançar no crédito.");
             if(updated.method.equals("card_payment")&&updated.type.equals("income"))throw new IllegalArgumentException("O pagamento de fatura deve ser uma saída.");
-            updated.sourceKey=e.sourceKey;store.saveEntry(updated);month=YearMonth.from(LocalDate.parse(updated.date));},original==null||e.id==0?null:()->confirmDelete("Excluir este lançamento?",()->store.deleteEntry(e.id)));
+            updated.sourceKey=e.sourceKey;
+            if(updated.description.isEmpty())throw new IllegalArgumentException("Informe a descrição.");
+            if(updated.amountCents<=0)throw new IllegalArgumentException("Informe um valor maior que zero.");
+            LocalDate.parse(updated.date);
+            String summary=updated.description+"\n"+Money.format(updated.amountCents)+" · "+(updated.type.equals("income")?"Entrada":"Saída")+"\nData: "+updated.date+"\nConta: "+accountName(updated.accountId)+"\nCategoria: "+categoryName(updated.categoryId)+"\nForma: "+methodName(updated.method)+(updated.cardId==0?"":"\nCartão: "+cardName(updated.cardId));
+            AlertDialog confirmation=new AlertDialog.Builder(this).setTitle("Confirmar lançamento").setMessage(summary).setNegativeButton("Voltar à revisão",null).setPositiveButton("Confirmar e salvar",null).create();
+            confirmation.setOnShowListener(y->confirmation.getButton(-1).setOnClickListener(button->{try{
+                if(updated.id==0&&notificationReview)store.saveReviewedNotification(updated);else store.saveEntry(updated);
+                month=YearMonth.from(LocalDate.parse(updated.date));if(afterSave!=null)afterSave.run();
+                confirmation.dismiss();editor.dismiss();render();
+            }catch(Exception ex){message(safeError(ex));}}));confirmation.show();
+        }catch(Exception ex){message(safeError(ex));}}));editor.show();
     }
 
     private void editCategory(Models.Category old){LinearLayout form=form();EditText name=field(form,"Nome",old==null?"":old.name,InputType.TYPE_CLASS_TEXT|InputType.TYPE_TEXT_FLAG_CAP_SENTENCES);
@@ -605,10 +684,11 @@ public final class MainActivity extends Activity {
         final YearMonth importMonth=YearMonth.from(LocalDate.parse(lastDate));
         form.addView(text(rows.size()+" lançamentos encontrados",19,GREEN,true));addTo(form,text("Destino: "+accountName(accountId)+(cardId==0?"":" · "+cardName(cardId)),12,GREEN,true),0,10,0,0);addTo(form,text("Entradas: "+money(incoming)+"\nSaídas: "+money(outgoing),14,TEXT,false),0,12,0,14);
         DateTimeFormatter fullDate=DateTimeFormatter.ofPattern("dd/MM/yyyy");addTo(form,text("Período: "+LocalDate.parse(firstDate).format(fullDate)+" a "+LocalDate.parse(lastDate).format(fullDate),12,MUTED,false),0,0,0,12);
-        form.addView(text("Revise a amostra abaixo. Duplicatas conhecidas na mesma conta serão ignoradas. Registros sem categoria podem ser editados após importar. Revise pagamentos de fatura e transferências próprias após importar. Arquivos diferentes sem identificador bancário podem exigir revisão manual de duplicatas.",12,MUTED,false));
-        for(int i=0;i<Math.min(12,entries.size());i++){Models.Entry e=entries.get(i);addTo(form,text(displayDate(e.date)+" · "+e.description+"\n"+(e.type.equals("income")?"+ ":"− ")+money(e.amountCents)+" · "+categoryName(e.categoryId),12,TEXT,false),0,14,0,0);}
-        if(entries.size()>12)addTo(form,text("Amostra: 12 de "+entries.size()+" registros.",12,MUTED,false),0,12,0,0);
-        new AlertDialog.Builder(this).setTitle("Revisar importação").setView(wrap(form)).setNegativeButton("Cancelar",null).setPositiveButton("Importar "+entries.size(),(d,w)->background(()->store.importEntries(entries),count->{month=importMonth;filter=0;search="";visibleEntries=PAGE_SIZE;if(renderedPage==1&&screenScroll!=null)screenScroll.scrollTo(0,0);pageScroll[1]=0;page=1;render();message(count+" lançamentos importados. "+(entries.size()-count)+" duplicatas ignoradas.");})).show();
+        form.addView(text("Revise todos os registros abaixo. Duplicatas conhecidas na mesma conta serão ignoradas. Registros sem categoria podem ser editados após importar. Revise pagamentos de fatura e transferências próprias após importar. Arquivos diferentes sem identificador bancário podem exigir revisão manual de duplicatas.",12,MUTED,false));
+        ListView preview=new ListView(this);preview.setContentDescription("Todos os lançamentos da importação");preview.addHeaderView(form,null,false);
+        ArrayList<String> details=new ArrayList<>();for(Models.Entry e:entries)details.add(e.date+" · "+e.description+"\n"+(e.type.equals("income")?"+ ":"− ")+money(e.amountCents)+" · "+categoryName(e.categoryId));
+        preview.setAdapter(new ArrayAdapter<String>(this,android.R.layout.simple_list_item_1,details){@Override public View getView(int position,View recycled,ViewGroup parent){TextView row=(TextView)super.getView(position,recycled,parent);row.setTextColor(TEXT);row.setTextSize(13);row.setPadding(dp(24),dp(14),dp(24),dp(14));return row;}});
+        new AlertDialog.Builder(this).setTitle("Revisar importação").setView(preview).setNegativeButton("Cancelar",null).setPositiveButton("Importar "+entries.size(),(d,w)->background(()->store.importEntries(entries),count->{month=importMonth;filter=0;search="";visibleEntries=PAGE_SIZE;if(renderedPage==1&&screenScroll!=null)screenScroll.scrollTo(0,0);pageScroll[1]=0;page=1;render();message(count+" lançamentos importados. "+(entries.size()-count)+" duplicatas ignoradas.");})).show();
     }
     private void restorePreview(String source){new AlertDialog.Builder(this).setTitle("Substituir todos os dados?").setMessage("Esta operação substitui contas, categorias, cartões, lançamentos, investimentos e a posição B3. Um backup antigo sem posição B3 remove o relatório atual. Um arquivo inválido não altera os dados atuais. Confirme somente se guardou uma cópia dos dados atuais.").setNegativeButton("Cancelar",null).setPositiveButton("Restaurar",(d,w)->background(()->{store.restoreBackup(source);return "Backup restaurado.";},result->{render();message(result);})).show();}
 

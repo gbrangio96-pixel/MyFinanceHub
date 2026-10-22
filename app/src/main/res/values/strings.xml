@@ -11,11 +11,20 @@
     <string name="capture_new_notifications">Capturar novas notificações</string>
     <string name="pluggy_consult_entry">Consultar ao entrar no aplicativo</string>
     <string name="pluggy_disconnected">Desconectado neste aparelho.</string>
-    <string name="pluggy_config_kept">Configuração anterior mantida. Consulte para verificar o acesso.</string>
-    <string name="pluggy_config_saved">Configuração protegida no aparelho. Consulte para verificar o acesso.</string>
     <string name="pluggy_consulting">Consultando a API pessoal Meu Pluggy… Nenhum lançamento será salvo automaticamente.</string>
-    <string name="pluggy_observed">Consulta concluída em %1$s. Não é confirmação de atualização do banco.</string>
     <string name="pluggy_reconciled">Conferi os registros existentes: este movimento ainda não foi lançado.</string>
     <string name="pluggy_saved">Lançamento confirmado. Nenhum saldo informado pelo banco foi aplicado.</string>
     <string name="pluggy_interrupted">Consulta interrompida. Consulte novamente para revisar.</string>
+    <string name="pluggy_ready_native">Conexão salva. Atualize para ver suas contas e movimentações aqui.</string>
+    <string name="pluggy_connect_native">Conecte a API Meu Pluggy para visualizar seus dados no aplicativo.</string>
+    <string name="pluggy_empty_native">Nenhuma conta consultada ainda. Configure sua conexão e atualize os dados.</string>
+    <string name="pluggy_query_invalid">Não foi possível consultar. Confira suas credenciais, conexões e período de até 90 dias.</string>
+    <string name="pluggy_previous_native">%1$s\nMantidos os dados da consulta de %2$s.</string>
+    <string name="pluggy_observed_native">Consulta realizada em %1$s. Veja a atualização da origem em Detalhes das conexões.</string>
+    <string name="pluggy_counts_native">Movimentações: %1$d · Pendentes: %2$d · Já salvas: %3$d</string>
+    <string name="pluggy_no_accounts_native">O provedor não retornou contas para as conexões configuradas.</string>
+    <string name="pluggy_balance_reference_native">Saldos informados pela instituição. Seus saldos locais permanecem como cadastrados.</string>
+    <string name="pluggy_no_matches_native">Nenhuma movimentação neste filtro ou período.</string>
+    <string name="pluggy_no_transactions_native">As movimentações consultadas aparecerão aqui, sem salvar automaticamente.</string>
+    <string name="pluggy_range_native">Dados de %1$s a %2$s</string>
 </resources>

@@ -1,4 +1,4 @@
-# Meu Pluggy pessoal no Android 0.6.0
+# Meu Pluggy pessoal no Android 0.6.1
 
 A consulta Android agora usa diretamente a API pessoal Pluggy, sem contratar hospedagem. O backend de leitura em `backend/` permanece disponível como alternativa técnica, mas não é necessário para a conexão pessoal no app. Não foi criada conta paga nem publicada infraestrutura.
 
@@ -9,13 +9,13 @@ A consulta Android agora usa diretamente a API pessoal Pluggy, sem contratar hos
 3. Em sua aplicação, abra Demo → Connect Account e escolha o conector **MeuPluggy**, e não o banco nem Sandbox. O objetivo é espelhar conexões que já autorizou no Meu Pluggy.
 4. Se necessário, habilite MeuPluggy em Customization → Connectors → Direct Connectors. Confira os itens espelhados em Connected Items.
 5. Guarde Client ID, Client Secret e os itemId. A API pessoal não lista automaticamente todos os itens: o app pede de um a cinco IDs, separados por vírgula.
-6. No MyFinanceHub, abra Ajustes → Meu Pluggy. Preencha suas credenciais somente nessa tela, salve e consulte. O campo Client Secret não é a senha bancária nem a senha de login no portal. Campos vazios mantêm a configuração salva; ao alterar, preencha os três campos juntos.
+6. No MyFinanceHub, abra Painel → Contas conectadas ou Ajustes → Meu Pluggy e toque Configurar conexão. Preencha suas credenciais somente nesse diálogo e toque Salvar e consultar. O campo Client Secret não é a senha bancária nem a senha de login no portal. Campos vazios mantêm a configuração salva; ao alterar, preencha os três campos juntos.
 
 Não envie credenciais, CPF, senhas ou extratos no chat. Não cadastre uma chave compartilhada de terceiros. A autenticação do aplicativo financeiro é local e separada da conta Meu Pluggy.
 
 ## Consulta e revisão
 
-A opção Consultar ao entrar faz a leitura em primeiro plano após o login local. Pode ser desativada na tela de conexão. O período padrão é de 30 dias, e o máximo é 90 dias inclusivos, sem data final futura. A consulta é somente leitura: não executa Pix, pagamentos, cadastro de contas bancárias nem sincronização forçada. O Meu Pluggy normalmente atualiza os bancos a cada 24 horas; horários/status da origem ficam visíveis.
+A tela principal é nativa: contas, cartões, saldos informados, horários e movimentações aparecem dentro do app, sem abrir navegador ou WebView. A configuração e o guia ficam em diálogos separados. Atualizar dados consulta diretamente a API; filtros por conta/situação e busca não alteram os dados financeiros. A opção Consultar ao entrar faz a leitura em primeiro plano após o login local. Pode ser desativada na tela de conexão. O período padrão é de 30 dias, e o máximo é 90 dias inclusivos, sem data final futura. A consulta é somente leitura: não executa Pix, pagamentos, cadastro de contas bancárias nem sincronização forçada. O Meu Pluggy normalmente atualiza os bancos a cada 24 horas; horários/status da origem ficam visíveis.
 
 Contas e compras no crédito ficam identificadas separadamente. O saldo informado é referência do provedor, não uma entrada e não um saldo inicial aplicado automaticamente. Nenhum lançamento local é criado ao consultar.
 

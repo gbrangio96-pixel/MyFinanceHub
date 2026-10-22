@@ -24,7 +24,7 @@ public final class LoginActivityTest {
     private static final String USER="usuario",PASSWORD="MinhaSenha123@",NEW_PASSWORD="OutraSenha456!";
     private Context context;private ActivityController<LoginActivity> controller;private LoginActivity activity;private LocalAuthStore auth;
     @Before public void before(){context=RuntimeEnvironment.getApplication();context.getSharedPreferences("local_auth",0).edit().clear().commit();context.getSharedPreferences("local_biometrics",0).edit().clear().commit();AuthSession.lock();auth=new LocalAuthStore(context);}
-    @After public void after()throws Exception {AlertDialog dialog=ShadowAlertDialog.getLatestAlertDialog();if(dialog!=null&&dialog.isShowing())dialog.dismiss();if(controller!=null){controller.pause().stop().destroy();worker().awaitTermination(10,TimeUnit.SECONDS);}context.getSharedPreferences("local_auth",0).edit().clear().commit();context.getSharedPreferences("local_biometrics",0).edit().clear().commit();AuthSession.lock();}
+    @After public void after()throws Exception {AlertDialog dialog=ShadowAlertDialog.getLatestAlertDialog();if(dialog!=null&&dialog.isShowing())dialog.dismiss();if(controller!=null){controller.pause().stop().destroy();worker().awaitTermination(10,TimeUnit.SECONDS);}context.getSharedPreferences("local_auth",0).edit().clear().commit();context.getSharedPreferences("local_biometrics",0).edit().clear().commit();AuthSession.initialize(context);AuthSession.lock();}
     @Test public void setupProtectsPasswordFieldsAndRejectsWeakPasswordWithoutCreatingAccess()throws Exception {
         start();assertNotNull(find(screen(),"Criar acesso local"));
         for(String label:new String[]{"Senha","Confirmar senha"}){EditText field=edit(screen(),label);assertFalse(field.isSaveEnabled());assertEquals(View.IMPORTANT_FOR_AUTOFILL_NO_EXCLUDE_DESCENDANTS,field.getImportantForAutofill());assertTrue(field.getFilterTouchesWhenObscured());}
@@ -57,6 +57,22 @@ public final class LoginActivityTest {
     }
     @Test public void unavailableBiometricsRemainDisabledAndBackLocksAccess()throws Exception {
         auth.create(USER,PASSWORD.toCharArray());start();assertFalse(find(screen(),"Entrar com biometria").isEnabled());activity.onBackPressed();assertFalse(AuthSession.isUnlocked());assertNull(shadowOf(activity).getNextStartedActivity());
+    }
+    @Test public void coldLauncherUsesValidPersistedGraceAndDoesNotRenderAnotherPasswordForm()throws Exception {
+        auth.create(USER,PASSWORD.toCharArray());SessionClock clock=new SessionClock();AuthSession.initialize(context,clock);AuthSession.unlock();AuthSession.onForeground();AuthSession.onBackground();clock.elapsed+=AuthSession.BACKGROUND_GRACE_MILLIS-1;
+        AuthSession.initialize(context,clock);assertTrue("A valid same-boot lease must survive launcher recreation",AuthSession.isUnlocked());start();
+        Intent launched=shadowOf(activity).getNextStartedActivity();assertNotNull(launched);assertEquals(MainActivity.class.getName(),launched.getComponent().getClassName());assertTrue(activity.isFinishing());
+        View content=screen();if(content!=null){assertNull(find(content,"Senha"));assertNull(find(content,"Entrar"));}assertTrue(AuthSession.isUnlocked());
+    }
+    @Test public void coldLauncherKeepsPasswordLoginWhenPersistedGraceHasExpired()throws Exception {
+        auth.create(USER,PASSWORD.toCharArray());SessionClock clock=new SessionClock();AuthSession.initialize(context,clock);AuthSession.unlock();AuthSession.onForeground();AuthSession.onBackground();clock.elapsed+=AuthSession.BACKGROUND_GRACE_MILLIS;
+        AuthSession.initialize(context,clock);assertFalse("Ten full minutes must expire the persisted lease",AuthSession.isUnlocked());start();
+        assertNull(shadowOf(activity).getNextStartedActivity());assertNotNull(find(screen(),"Senha"));assertNotNull(find(screen(),"Entrar"));assertFalse(AuthSession.isUnlocked());assertFalse(activity.isFinishing());
+    }
+    private static final class SessionClock implements AuthSession.TimeSource {
+        long elapsed=100_000;
+        public long elapsedRealtime(){return elapsed;}
+        public int bootCount(){return 7;}
     }
     private void start(){controller=Robolectric.buildActivity(LoginActivity.class).setup().visible();activity=controller.get();idle();}
     private View screen(){return activity.findViewById(android.R.id.content);}

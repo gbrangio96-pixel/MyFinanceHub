@@ -2,7 +2,7 @@
 
 - Use o checkout existente e preserve os dados e as alterações do usuário.
 - Entregue um APK atualizado ao concluir alterações no Android. Só disponibilize projeto em ZIP se o usuário pedir.
-- A versão 0.6.0 usa pacote `br.com.myfinancehub`, código 9, APK de distribuição `assembleRelease` sem depuração. Preserve a assinatura anterior e a chave de desenvolvimento fora do Git para atualizar sem desinstalar; esse certificado não é uma chave de publicação Play Store.
+- A versão 0.6.1 usa pacote `br.com.myfinancehub`, código 10, APK de distribuição `assembleRelease` sem depuração. Preserve a assinatura anterior e a chave de desenvolvimento fora do Git para atualizar sem desinstalar; esse certificado não é uma chave de publicação Play Store.
 - Notificações restauradas na edição única por solicitação do usuário. Captura opcional só cria sugestões; revisão e confirmação no app são obrigatórias antes de salvar. Não reintroduza flavors antigos ou WhatsApp/transcrição.
 - Valide Android com `./scripts/verify.sh` (testDebugUnitTest, lintDebug/Release, assembleDebug/Release e verificação de certificado/alinhamento/depuração). `./scripts/build-release.sh` monta e valida o APK de distribuição sem repetir a suíte. Ferramentas em `/workspace/.myfinancehub-tools`; não publique chaves, caches ou dados financeiros reais.
 - Banco/backup v4: migração aditiva de v1/v2/v3, restauração de backups v1/v2/v3/v4. Preserve os lançamentos já confirmados e as origens históricas. Não altere valores anteriores durante a migração.
@@ -11,3 +11,5 @@
 - Cotações são opcionais, com chave do usuário em preferências privadas, fora de JSON/Git/APK. Use HTTPS brapi e horário do provedor. Não prometa tempo real: bolsa tem atraso conforme plano. A atualização automática começa desligada, ocorre com app aberto e preserva valores nas falhas.
 - Finanças usam centavos inteiros; quantidades/preços, decimais exatos. Quantidade de investimento até 8 casas; preço até 12. Rentabilidade simples = (atual - aplicado) / aplicado, sem anualização ou proventos.
 - O Android consulta a API pessoal Meu Pluggy diretamente: credenciais próprias digitadas no aparelho ficam criptografadas no Android Keystore, fora de Git/APK/backups. Login do MyFinanceHub é local, com senha/biometria e código de recuperação, sem conta online. O backend em `backend/` permanece alternativa separada, sem implantação. Seus testes offline usam `cd backend && npm test`.
+
+- Sessão local: 10 minutos de tolerância após ir ao segundo plano, persistida no armazenamento privado e vinculada ao boot/tempo monotônico; bloqueio manual e recuperação invalidam imediatamente. UI Meu Pluggy nativa, com contas e movimentações; configuração separada, sem abrir sites para consultar os dados.

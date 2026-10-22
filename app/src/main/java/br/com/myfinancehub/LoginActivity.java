@@ -14,7 +14,7 @@ public final class LoginActivity extends Activity {
     private LocalAuthStore auth;private AppAppearance.Palette colors;
     private final ExecutorService worker=Executors.newSingleThreadExecutor();private boolean destroyed,busy,resumed;private Runnable pendingCompletion;
     private LinearLayout content;private Button submit,biometric;private EditText username,password,confirm;
-    @Override public void onCreate(Bundle state){setTheme(AppAppearance.themeRes(this));super.onCreate(state);colors=AppAppearance.palette(this);auth=new LocalAuthStore(this);getWindow().addFlags(WindowManager.LayoutParams.FLAG_SECURE);render();}
+    @Override public void onCreate(Bundle state){setTheme(AppAppearance.themeRes(this));super.onCreate(state);colors=AppAppearance.palette(this);auth=new LocalAuthStore(this);getWindow().addFlags(WindowManager.LayoutParams.FLAG_SECURE);if(auth.configured()&&AuthSession.isUnlocked()){enter();return;}render();}
     private void render(){
         boolean setup=!auth.configured();LinearLayout root=column();root.setBackgroundColor(colors.background);
         if(Build.VERSION.SDK_INT>=30){getWindow().setDecorFitsSystemWindows(false);root.setOnApplyWindowInsetsListener((v,insets)->{android.graphics.Insets b=insets.getInsets(WindowInsets.Type.systemBars()|WindowInsets.Type.displayCutout());v.setPadding(b.left,b.top,b.right,b.bottom);return insets;});}else root.setFitsSystemWindows(true);

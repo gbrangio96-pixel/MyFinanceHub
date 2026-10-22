@@ -194,6 +194,7 @@ public final class MainActivity extends LockedActivity {
         Button wallet=button("Ver carteira",GREEN,colors.onPrimary);wallet.setOnClickListener(v->{page=2;render();});content.addView(wallet);
         add(text("Rentabilidade simples compara valor atual e total aplicado, sem rendimentos pagos, impostos ou taxa anualizada. Cotações configuradas atualizam esta soma; posições manuais mantêm o valor informado.",12,MUTED,false),0,12,0,0);
         b3Summary(false);
+        action("Contas conectadas","Saldos e movimentações pela API Meu Pluggy, dentro do aplicativo.",()->startActivity(new Intent(this,PluggyActivity.class)));
 
     }
 

@@ -36,10 +36,17 @@ public final class AuthGateTest {
             Intent login=shadowOf(activity).getNextStartedActivity();assertNotNull(login);assertEquals(LoginActivity.class.getName(),login.getComponent().getClassName());assertTrue(login.getBooleanExtra("return_to_activity",false));assertFalse(AuthSession.isUnlocked());
         }
     }
-    @Test public void backgroundingLocksAndReturningWithoutAuthenticationKeepsFinancialScreenHidden(){
-        AuthSession.unlock();ActivityController<MainActivity> controller=Robolectric.buildActivity(MainActivity.class).setup().visible();controllers.add(controller);MainActivity activity=controller.get();idle();assertEquals(View.VISIBLE,activity.getWindow().getDecorView().getVisibility());assertNull(shadowOf(activity).getNextStartedActivity());
-        controller.pause().stop();idle();assertFalse(AuthSession.isUnlocked());assertEquals(View.INVISIBLE,activity.getWindow().getDecorView().getVisibility());assertEquals(View.INVISIBLE,activity.findViewById(android.R.id.content).getVisibility());
-        controller.start().resume();idle();assertFalse(AuthSession.isUnlocked());assertEquals(View.INVISIBLE,activity.getWindow().getDecorView().getVisibility());assertEquals(View.INVISIBLE,activity.findViewById(android.R.id.content).getVisibility());assertEquals(LoginActivity.class.getName(),shadowOf(activity).getNextStartedActivity().getComponent().getClassName());
+    @Test public void shortBackgroundReturnKeepsLoginButExpiredGraceRequestsAuthentication(){
+        AuthSessionTest.FakeTime clock=new AuthSessionTest.FakeTime();AuthSession.initialize(context,clock);
+        AuthSession.unlock();ActivityController<MainActivity> controller=Robolectric.buildActivity(MainActivity.class).setup().visible();controllers.add(controller);MainActivity activity=controller.get();idle();assertNull(shadowOf(activity).getNextStartedActivity());
+        controller.pause().stop();idle();assertTrue(AuthSession.isUnlocked());assertEquals(View.INVISIBLE,activity.findViewById(android.R.id.content).getVisibility());
+        clock.advance(60_000);controller.restart().resume();idle();assertTrue(AuthSession.isUnlocked());assertEquals(View.VISIBLE,activity.findViewById(android.R.id.content).getVisibility());assertNull(shadowOf(activity).getNextStartedActivity());
+        clock.advance(20);controller.pause().stop();idle();
+        assertEquals("Background must begin its lease before time advances",clock.elapsed,context.getSharedPreferences("auth_session",0).getLong("started_elapsed",-1));
+        clock.advance(AuthSession.BACKGROUND_GRACE_MILLIS);
+        assertFalse("A full background grace period must expire before resuming",AuthSession.isUnlocked());
+        // restart() performs Android performRestart(true), including performStart.
+        controller.restart().resume();idle();assertFalse(AuthSession.isUnlocked());assertEquals(View.INVISIBLE,activity.findViewById(android.R.id.content).getVisibility());assertEquals(LoginActivity.class.getName(),shadowOf(activity).getNextStartedActivity().getComponent().getClassName());
     }
     @Test public void explicitLockActionRequiresFreshLoginAndPreservesData()throws Exception {
         AuthSession.unlock();ActivityController<MainActivity> controller=Robolectric.buildActivity(MainActivity.class).setup().visible();controllers.add(controller);MainActivity activity=controller.get();idle();

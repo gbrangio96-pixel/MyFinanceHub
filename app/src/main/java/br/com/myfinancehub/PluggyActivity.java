@@ -5,72 +5,117 @@ import android.os.*;
 import android.text.InputType;
 import android.view.*;
 import android.widget.*;
-import java.math.BigDecimal;
+import android.graphics.drawable.GradientDrawable;
 import java.time.*;
+import java.time.format.DateTimeFormatter;
 import java.util.*;
 import java.util.concurrent.*;
 
-/** Explicit, foreground-only connection. A downloaded snapshot never writes to the ledger. */
+/** Native account/transaction dashboard backed by the personal Pluggy API. */
 public final class PluggyActivity extends LockedActivity {
     private AppAppearance.Palette colors;
-    private FinanceStore store;private PersonalPluggySettings settings;
+    private FinanceStore store;
+    PersonalPluggySettings settings;
+    PluggyPersonalClient client=new PluggyPersonalClient();
     private final ExecutorService worker=Executors.newSingleThreadExecutor();
-    private Future<?> task;private int generation;private boolean busy,destroyed,entryConsulted;
-    private LinearLayout header;private ListView list;private TextView status,summary;
-    private EditText origin,token,itemIds,from,to;private Button fetch,save,disconnect;
+    private Future<?> task;private int generation;private boolean busy,destroyed,entryConsulted,updatingFilters;
+    private LinearLayout header,accountCards;
+    private ListView list;private TextView status,summary,emptyState,dataRange;
+    private EditText from,to,search;
+    private Button fetch,configure,connectionDetails;
+    private Spinner accountFilter,statusFilter;
     private PluggyClient.Snapshot snapshot;
-    private CheckBox consultOnEntry;
+    private final List<PluggyClient.Transaction> filteredRows=new ArrayList<>();
     @Override public void onCreate(Bundle state){
         setTheme(AppAppearance.themeRes(this));super.onCreate(state);colors=AppAppearance.palette(this);store=new FinanceStore(this);settings=new PersonalPluggySettings(this);
         getWindow().addFlags(WindowManager.LayoutParams.FLAG_SECURE);
         LinearLayout root=column();root.setBackgroundColor(colors.background);
         if(Build.VERSION.SDK_INT>=30){getWindow().setDecorFitsSystemWindows(false);root.setOnApplyWindowInsetsListener((v,insets)->{android.graphics.Insets bars=insets.getInsets(WindowInsets.Type.systemBars()|WindowInsets.Type.displayCutout());v.setPadding(bars.left,bars.top,bars.right,bars.bottom);return insets;});}else root.setFitsSystemWindows(true);
-        list=new ListView(this);list.setContentDescription("Transações Meu Pluggy");header=column();header.setPadding(dp(22),dp(16),dp(22),dp(24));list.addHeaderView(header,null,false);root.addView(list,new LinearLayout.LayoutParams(-1,-1));setContentView(root);
+        list=new ListView(this);list.setContentDescription("Transações Meu Pluggy");list.setDivider(null);header=column();header.setPadding(dp(22),dp(16),dp(22),dp(20));list.addHeaderView(header,null,false);root.addView(list,new LinearLayout.LayoutParams(-1,-1));setContentView(root);
         getWindow().setStatusBarColor(colors.background);getWindow().setNavigationBarColor(colors.background);
-        Button back=button("Voltar");header.addView(back);back.setOnClickListener(v->finish());
-        label(header,"Meu Pluggy",26);label(header,"Consulte suas conexões pessoais já autorizadas. Sem servidor próprio ou hospedagem. Cada transação exige revisão e confirmação; a consulta não movimenta dinheiro.",14);
-        Button portal=button("Autorizar bancos no Meu Pluggy");portal.setOnClickListener(v->{try{startActivity(new android.content.Intent(android.content.Intent.ACTION_VIEW,android.net.Uri.parse("https://meu.pluggy.ai")));}catch(android.content.ActivityNotFoundException ex){error("Abra https://meu.pluggy.ai no navegador para gerenciar seus consentimentos.");}});header.addView(portal);
-        origin=field(header,"Client ID pessoal","",InputType.TYPE_CLASS_TEXT);origin.setSaveEnabled(false);origin.setImportantForAutofill(View.IMPORTANT_FOR_AUTOFILL_NO_EXCLUDE_DESCENDANTS);
-        token=field(header,"Client Secret pessoal","",InputType.TYPE_CLASS_TEXT|InputType.TYPE_TEXT_VARIATION_PASSWORD);token.setSaveEnabled(false);token.setImportantForAutofill(View.IMPORTANT_FOR_AUTOFILL_NO_EXCLUDE_DESCENDANTS);token.setFilterTouchesWhenObscured(true);
-        itemIds=field(header,"IDs das conexões MeuPluggy (separados por vírgula)","",InputType.TYPE_CLASS_TEXT);itemIds.setSaveEnabled(false);itemIds.setImportantForAutofill(View.IMPORTANT_FOR_AUTOFILL_NO_EXCLUDE_DESCENDANTS);
-        label(header,"Após autorizar os bancos no Meu Pluggy, abra Dashboard → aplicação → Demo → Connect Account e escolha MeuPluggy. Copie seu Client ID, Client Secret e os itemId espelhados. Preencha somente aqui; nunca envie pelo chat. Não use a senha do banco ou do portal nestes campos.",13);
-        label(header,"As credenciais são suas e ficam criptografadas neste aparelho. Campos vazios mantêm a configuração já salva. A gratuidade e cobertura dependem das condições do Meu Pluggy; o app não contrata planos.",13);
-        consultOnEntry=new CheckBox(this);consultOnEntry.setText(R.string.pluggy_consult_entry);consultOnEntry.setTextColor(colors.text);consultOnEntry.setChecked(!settings.configured()||settings.consultOnEntry());header.addView(consultOnEntry);
-        save=button("Salvar conexão");save.setOnClickListener(v->saveSettings());header.addView(save);
-        disconnect=button("Desconectar Meu Pluggy");disconnect.setOnClickListener(v->new AlertDialog.Builder(this).setTitle("Desconectar?").setMessage("Remove a configuração deste aparelho e a consulta da tela. Os lançamentos confirmados permanecem. Para revogar consentimentos ou chaves, use Meu Pluggy e o Dashboard da Pluggy.").setNegativeButton("Cancelar",null).setPositiveButton("Desconectar",(d,w)->{try{cancel();settings.clear();origin.setText("");token.setText("");itemIds.setText("");snapshot=null;renderRows();status.setText(R.string.pluggy_disconnected);}catch(Exception ex){error(ex.getMessage());}}).show());header.addView(disconnect);
-        LocalDate today=LocalDate.now(ZoneId.of("America/Sao_Paulo"));from=field(header,"Data inicial (AAAA-MM-DD)",today.minusDays(29).toString(),InputType.TYPE_CLASS_DATETIME);to=field(header,"Data final (AAAA-MM-DD)",today.toString(),InputType.TYPE_CLASS_DATETIME);
-        label(header,"Até 90 dias por consulta. O Meu Pluggy costuma atualizar as conexões a cada 24 horas; consultar não força atualização no banco. A sincronização aqui é manual.",13);
-        fetch=button("Consultar transações");fetch.setOnClickListener(v->query());header.addView(fetch);
-        status=label(header,settings.configured()?"Configuração protegida no aparelho. Consulte para verificar o acesso.":"Configure suas credenciais pessoais para consultar. Nenhum dado bancário foi consultado.",14);
-        summary=label(header,"",14);renderRows();
-        list.setOnItemClickListener((parent,view,position,id)->{int index=position-list.getHeaderViewsCount();if(snapshot!=null&&index>=0&&index<snapshot.transactions.size())review(snapshot.transactions.get(index));});
+        Button back=button("‹ Voltar");header.addView(back);back.setOnClickListener(v->finish());
+        label(header,"FINANÇAS CONECTADAS",12);label(header,"Suas contas, no app",27);
+        label(header,"Consulte saldos e movimentações pela API Meu Pluggy. Revise cada lançamento antes de salvar.",14);
+        LinearLayout actions=new LinearLayout(this);actions.setOrientation(LinearLayout.HORIZONTAL);
+        fetch=button("Atualizar dados");fetch.setOnClickListener(v->{if(settings.configured())query();else showConnectionSettings();});actions.addView(fetch,new LinearLayout.LayoutParams(0,-2,1));
+        configure=button("Configurar conexão");configure.setOnClickListener(v->showConnectionSettings());actions.addView(configure,new LinearLayout.LayoutParams(0,-2,1));header.addView(actions);
+        status=label(header,settings.configured()?getString(R.string.pluggy_ready_native):getString(R.string.pluggy_connect_native),14);status.setContentDescription("Estado da consulta Meu Pluggy");
+        label(header,"Contas e cartões",19);
+        HorizontalScrollView accountsScroll=new HorizontalScrollView(this);accountsScroll.setHorizontalScrollBarEnabled(false);accountCards=new LinearLayout(this);accountCards.setOrientation(LinearLayout.HORIZONTAL);accountCards.setContentDescription("Contas consultadas pela API");accountsScroll.addView(accountCards);header.addView(accountsScroll);
+        emptyState=label(header,getString(R.string.pluggy_empty_native),14);emptyState.setContentDescription("Resultado da consulta Meu Pluggy");
+        LocalDate today=LocalDate.now(ZoneId.of("America/Sao_Paulo"));
+        LinearLayout dates=new LinearLayout(this);dates.setOrientation(LinearLayout.HORIZONTAL);
+        LinearLayout left=column(),right=column();from=field(left,"Data inicial",today.minusDays(29).toString(),InputType.TYPE_NULL);to=field(right,"Data final",today.toString(),InputType.TYPE_NULL);dates.addView(left,new LinearLayout.LayoutParams(0,-2,1));dates.addView(right,new LinearLayout.LayoutParams(0,-2,1));header.addView(dates);datePicker(from);datePicker(to);
+        label(header,"Até 90 dias. O horário do banco pode ser anterior ao da consulta; consultar não força uma atualização na instituição.",12);
+        connectionDetails=button("Detalhes das conexões");connectionDetails.setEnabled(false);connectionDetails.setOnClickListener(v->{if(snapshot!=null)new AlertDialog.Builder(this).setTitle("Atualização das conexões").setMessage(String.join("\n\n",snapshot.connections)).setPositiveButton("Fechar",null).show();});header.addView(connectionDetails);
+        label(header,"Movimentações",20);summary=label(header,"",13);summary.setContentDescription("Resumo de transações Meu Pluggy");dataRange=label(header,"",12);dataRange.setContentDescription("Período dos dados consultados");
+        accountFilter=spinner(header,"Filtrar conta",Collections.singletonList("Todas as contas"));
+        statusFilter=spinner(header,"Filtrar situação",Arrays.asList("Todas as movimentações","Para revisar","Pendentes","Já salvas"));
+        search=field(header,"Buscar movimentação","",InputType.TYPE_CLASS_TEXT);
+        android.widget.AdapterView.OnItemSelectedListener listener=new android.widget.AdapterView.OnItemSelectedListener(){public void onNothingSelected(android.widget.AdapterView<?> parent){}public void onItemSelected(android.widget.AdapterView<?> parent,View view,int position,long id){if(!updatingFilters)renderRows();}};
+        accountFilter.setOnItemSelectedListener(listener);statusFilter.setOnItemSelectedListener(listener);
+        search.addTextChangedListener(new android.text.TextWatcher(){public void beforeTextChanged(CharSequence s,int start,int count,int after){}public void afterTextChanged(android.text.Editable text){}public void onTextChanged(CharSequence s,int start,int before,int count){renderRows();}});
+        list.setOnItemClickListener((parent,view,position,id)->{int index=position-list.getHeaderViewsCount();if(index>=0&&index<filteredRows.size())review(filteredRows.get(index));});renderRows();
     }
-    private void saveSettings(){try{if(busy)return;
-        String id=origin.getText().toString().trim(),secret=token.getText().toString(),ids=itemIds.getText().toString().trim();
-        if(id.isEmpty()&&secret.isEmpty()&&ids.isEmpty()){if(!settings.configured())throw new IllegalArgumentException("Preencha suas credenciais pessoais e os IDs das conexões.");settings.setConsultOnEntry(consultOnEntry.isChecked());status.setText(R.string.pluggy_config_kept);return;}
-        if(id.isEmpty()||secret.isEmpty()||ids.isEmpty())throw new IllegalArgumentException("Ao alterar a conexão, preencha Client ID, Client Secret e os IDs das conexões juntos.");
-        settings.save(id,secret,PluggyPersonalClient.itemIds(ids));settings.setConsultOnEntry(consultOnEntry.isChecked());token.setText("");origin.setText("");itemIds.setText("");snapshot=null;renderRows();status.setText(R.string.pluggy_config_saved);
-    }catch(Exception ex){error(ex.getMessage());}}
+    private void datePicker(EditText input){input.setFocusable(false);input.setOnClickListener(v->{LocalDate day=LocalDate.parse(input.getText().toString());new DatePickerDialog(this,(picker,year,month,date)->input.setText(LocalDate.of(year,month+1,date).toString()),day.getYear(),day.getMonthValue()-1,day.getDayOfMonth()).show();});}
+    void showConnectionSettings(){
+        if(busy||!AuthSession.isUnlocked())return;
+        LinearLayout form=column();form.setPadding(dp(22),dp(8),dp(22),dp(18));
+        label(form,"Conecte sua API pessoal uma vez. Contas, saldos e movimentações serão consultados e exibidos nesta tela.",14);
+        EditText origin=field(form,"Client ID pessoal","",InputType.TYPE_CLASS_TEXT),token=field(form,"Client Secret pessoal","",InputType.TYPE_CLASS_TEXT|InputType.TYPE_TEXT_VARIATION_PASSWORD),itemIds=field(form,"IDs das conexões MeuPluggy (separados por vírgula)","",InputType.TYPE_CLASS_TEXT);
+        for(EditText value:new EditText[]{origin,token,itemIds}){value.setSaveEnabled(false);value.setImportantForAutofill(View.IMPORTANT_FOR_AUTOFILL_NO_EXCLUDE_DESCENDANTS);value.setFilterTouchesWhenObscured(true);}
+        label(form,"Use as credenciais da sua aplicação pessoal e os IDs das conexões espelhadas pelo conector MeuPluggy. Não use a senha do banco ou do portal. As credenciais ficam protegidas neste aparelho.",13);
+        if(settings.configured())label(form,"Deixe os três campos vazios para manter a conexão. Para trocar as credenciais, preencha os três juntos.",13);
+        CheckBox automatic=new CheckBox(this);automatic.setText(R.string.pluggy_consult_entry);automatic.setTextColor(colors.text);automatic.setChecked(!settings.configured()||settings.consultOnEntry());form.addView(automatic);
+        Button help=button("Como preparar minha conexão");help.setOnClickListener(v->new AlertDialog.Builder(this).setTitle("Preparar a API pessoal")
+            .setMessage("1. No Meu Pluggy, autorize seus bancos.\n\n2. No Dashboard Pluggy da mesma conta, abra sua aplicação → Demo → Connect Account e escolha MeuPluggy para espelhar os itens.\n\n3. Copie Client ID, Client Secret e itemId para estes campos.\n\nDepois da configuração, a leitura pela API e a visualização são feitas aqui no aplicativo. Eventuais consentimentos ou renovações continuam no ambiente oficial do banco/provedor.")
+            .setPositiveButton("Entendi",null).show());form.addView(help);
+        ScrollView scroll=new ScrollView(this);scroll.addView(form);
+        AlertDialog.Builder builder=new AlertDialog.Builder(this).setTitle("Conectar API Meu Pluggy").setView(scroll).setNegativeButton("Cancelar",null).setPositiveButton("Salvar e consultar",null);
+        if(settings.configured())builder.setNeutralButton("Desconectar",(d,w)->confirmDisconnect());AlertDialog dialog=builder.create();
+        dialog.setOnShowListener(d->dialog.getButton(-1).setOnClickListener(v->{try{
+            String id=origin.getText().toString().trim(),secret=token.getText().toString(),ids=itemIds.getText().toString().trim();
+            if(id.isEmpty()&&secret.isEmpty()&&ids.isEmpty()){if(!settings.configured())throw new IllegalArgumentException("Preencha Client ID, Client Secret e os IDs das conexões.");}
+            else{if(id.isEmpty()||secret.isEmpty()||ids.isEmpty())throw new IllegalArgumentException("Preencha os três campos para alterar a conexão.");settings.save(id,secret,PluggyPersonalClient.itemIds(ids));}
+            settings.setConsultOnEntry(automatic.isChecked());token.setText("");origin.setText("");itemIds.setText("");dialog.dismiss();entryConsulted=true;query();
+        }catch(Exception ex){error(ex.getMessage());}}));dialog.show();
+    }
+    private void confirmDisconnect(){new AlertDialog.Builder(this).setTitle("Desconectar Meu Pluggy?").setMessage("Remove as credenciais e os dados consultados desta tela. Seus lançamentos confirmados permanecem. Para revogar consentimentos ou chaves, use o ambiente oficial do provedor.")
+        .setNegativeButton("Cancelar",null).setPositiveButton("Desconectar",(d,w)->{try{cancel();settings.clear();snapshot=null;renderAccounts();resetAccountFilter();renderRows();status.setText(R.string.pluggy_disconnected);}catch(Exception ex){error(ex.getMessage());}}).show();}
     protected void query(){
         if(busy||!AuthSession.isUnlocked())return;
-        try {
-            if(!token.getText().toString().isEmpty()||!origin.getText().toString().trim().isEmpty()||!itemIds.getText().toString().trim().isEmpty())throw new IllegalArgumentException("Salve a configuração antes de consultar.");
-            PersonalPluggySettings.Credentials credentials=settings.load();LocalDate start=PluggyClient.day(from.getText().toString().trim()),end=PluggyClient.day(to.getText().toString().trim());
-            snapshot=null;renderRows();setBusy(true);status.setText(R.string.pluggy_consulting);int request=++generation;
-            task=worker.submit(()->{try{PluggyClient.Snapshot result=new PluggyPersonalClient().fetch(credentials.clientId,credentials.clientSecret,credentials.itemIds,start,end);runOnUiThread(()->{if(destroyed||generation!=request)return;setBusy(false);showSnapshot(result);});}catch(Exception ex){runOnUiThread(()->{if(destroyed||generation!=request)return;setBusy(false);status.setText(ex instanceof java.io.IOException?ex.getMessage():"Não foi possível consultar. Confira suas credenciais, conexões e período de até 90 dias.");});}});
+        try{
+            PersonalPluggySettings.Credentials credentials=settings.load();LocalDate start=PluggyClient.day(from.getText().toString()),end=PluggyClient.day(to.getText().toString());
+            setBusy(true);status.setText(R.string.pluggy_consulting);int request=++generation;
+            task=worker.submit(()->{try{PluggyClient.Snapshot result=client.fetch(credentials.clientId,credentials.clientSecret,credentials.itemIds,start,end);runOnUiThread(()->{if(destroyed||generation!=request)return;setBusy(false);showSnapshot(result);});}
+                catch(Exception ex){runOnUiThread(()->{if(destroyed||generation!=request)return;setBusy(false);String message=ex instanceof java.io.IOException?ex.getMessage():getString(R.string.pluggy_query_invalid);status.setText(snapshot==null?message:getString(R.string.pluggy_previous_native,message,formatTime(snapshot.observedAt)));});}});
         }catch(Exception ex){error(ex.getMessage());}
     }
-    void showSnapshot(PluggyClient.Snapshot value){snapshot=value;status.setText(getString(R.string.pluggy_observed,value.observedAt));renderRows();}
-    private void renderRows(){
-        ArrayList<String> rows=new ArrayList<>();StringBuilder info=new StringBuilder();
-        if(snapshot!=null){info.append("Período: ").append(snapshot.from).append(" a ").append(snapshot.to).append('\n');for(String connection:snapshot.connections)info.append(connection).append('\n');
-            for(PluggyClient.Account a:snapshot.accounts)info.append(a.name).append(a.kind.equals("CREDIT")?" · crédito":" · conta").append("\nSaldo informado: ").append(Money.format(a.balance)).append(" (não aplicado ao saldo local)\n");
-            info.append("Revise a origem, a conta/cartão e pagamentos de fatura ou transferências próprias. CSV, notificações e conexões recriadas podem conter o mesmo movimento com outra identidade.\n");
-            for(PluggyClient.Transaction t:snapshot.transactions){boolean saved=store.hasPluggySource(t.sourceKey);rows.add((saved?"Já salvo":t.status.equals("PENDING")?"Pendente · não pode salvar":"Revisar")+" · "+snapshot.account(t).name+"\n"+t.date+" · "+t.description+"\n"+(t.direction.equals("income")?"+ ":"− ")+Money.format(t.amount));}
-            if(rows.isEmpty())info.append("Nenhuma transação neste período.");
-        }
-        summary.setText(info);list.setAdapter(new ArrayAdapter<String>(this,android.R.layout.simple_list_item_1,rows){@Override public View getView(int p,View recycled,ViewGroup parent){TextView row=(TextView)super.getView(p,recycled,parent);row.setTextColor(colors.text);row.setTextSize(14);row.setPadding(dp(22),dp(16),dp(22),dp(16));return row;}});
+    void showSnapshot(PluggyClient.Snapshot value){snapshot=value;status.setText(getString(R.string.pluggy_observed_native,formatTime(value.observedAt)));renderAccounts();resetAccountFilter();renderRows();}
+    private void renderAccounts(){accountCards.removeAllViews();connectionDetails.setEnabled(snapshot!=null);
+        if(snapshot==null)return;
+        for(PluggyClient.Account account:snapshot.accounts){LinearLayout card=column();card.setPadding(dp(16),dp(14),dp(16),dp(14));GradientDrawable bg=new GradientDrawable();bg.setColor(colors.surface);bg.setCornerRadius(dp(16));card.setBackground(bg);card.setContentDescription("Conta API "+account.name);
+            label(card,account.name,16);label(card,account.kind.equals("CREDIT")?"Cartão de crédito":"Conta bancária",12);TextView balance=label(card,Money.format(account.balance),23);balance.setTextColor(colors.primary);label(card,"Saldo informado pelo banco",12);
+            LinearLayout.LayoutParams lp=new LinearLayout.LayoutParams(dp(255),-2);lp.setMargins(0,dp(8),dp(10),dp(12));accountCards.addView(card,lp);}
     }
+    private void resetAccountFilter(){updatingFilters=true;ArrayList<String> names=new ArrayList<>();names.add("Todas as contas");if(snapshot!=null)for(PluggyClient.Account account:snapshot.accounts)names.add(account.name+(account.kind.equals("CREDIT")?" · cartão":" · conta"));accountFilter.setAdapter(new ArrayAdapter<>(this,android.R.layout.simple_spinner_dropdown_item,names));accountFilter.setSelection(0);updatingFilters=false;}
+    private void renderRows(){
+        if(summary==null)return;ArrayList<String> rows=new ArrayList<>();filteredRows.clear();int pending=0,savedCount=0;
+        int accountIndex=accountFilter==null?0:Math.max(0,accountFilter.getSelectedItemPosition());int filter=statusFilter==null?0:Math.max(0,statusFilter.getSelectedItemPosition());String query=search==null?"":search.getText().toString().trim().toLowerCase(Locale.ROOT);
+        if(snapshot!=null){
+            dataRange.setText(getString(R.string.pluggy_range_native,snapshot.from,snapshot.to));
+            for(PluggyClient.Transaction t:snapshot.transactions){boolean saved=store.hasPluggySource(t.sourceKey);if(t.status.equals("PENDING"))pending++;if(saved)savedCount++;
+                if(accountIndex>0&&(accountIndex>snapshot.accounts.size()||!snapshot.accounts.get(accountIndex-1).id.equals(t.accountId)||!snapshot.accounts.get(accountIndex-1).itemId.equals(t.itemId)))continue;
+                if(filter==1&&(saved||!t.status.equals("POSTED"))||filter==2&&!t.status.equals("PENDING")||filter==3&&!saved)continue;
+                if(!(t.description+" "+t.date+" "+snapshot.account(t).name).toLowerCase(Locale.ROOT).contains(query))continue;
+                filteredRows.add(t);rows.add((saved?"Já salvo":t.status.equals("PENDING")?"Pendente · somente consulta":"Revisar lançamento")+" · "+snapshot.account(t).name+"\n"+t.description+"\n"+t.date+"   "+(t.direction.equals("income")?"+ ":"− ")+Money.format(t.amount));}
+            summary.setText(getString(R.string.pluggy_counts_native,snapshot.transactions.size(),pending,savedCount));
+            emptyState.setText(snapshot.accounts.isEmpty()?getString(R.string.pluggy_no_accounts_native):getString(R.string.pluggy_balance_reference_native));
+            if(rows.isEmpty())summary.setText(getString(R.string.pluggy_no_matches_native));
+        }else{dataRange.setText("");summary.setText(R.string.pluggy_no_transactions_native);emptyState.setText(R.string.pluggy_empty_native);}
+        list.setAdapter(new ArrayAdapter<String>(this,android.R.layout.simple_list_item_1,rows){@Override public View getView(int p,View recycled,ViewGroup parent){TextView row=(TextView)super.getView(p,recycled,parent);row.setTextColor(colors.text);row.setTextSize(14);row.setPadding(dp(22),dp(16),dp(22),dp(16));return row;}});
+    }
+    private String formatTime(String value){try{return DateTimeFormatter.ofPattern("dd/MM/yyyy HH:mm",new Locale("pt","BR")).withZone(ZoneId.of("America/Sao_Paulo")).format(Instant.parse(value));}catch(Exception ex){return value;}}
     void review(PluggyClient.Transaction transaction){
         if(snapshot==null||!AuthSession.isUnlocked())return;
         if(!transaction.status.equals("POSTED")){error("Transação pendente: consulte novamente quando o provedor confirmar. Ela não altera seu saldo.");return;}
@@ -100,14 +145,14 @@ public final class PluggyActivity extends LockedActivity {
             confirmation.setOnShowListener(shown->{confirmation.getButton(-1).setFilterTouchesWhenObscured(true);confirmation.getButton(-1).setOnClickListener(button->{try{store.saveReviewedPluggy(entry);confirmation.dismiss();editor.dismiss();renderRows();status.setText(R.string.pluggy_saved);}catch(Exception ex){error(ex.getMessage());}});});confirmation.show();
         }catch(Exception ex){error(ex.getMessage());}}));editor.show();
     }
-    private void setBusy(boolean value){busy=value;fetch.setEnabled(!value);save.setEnabled(!value);origin.setEnabled(!value);token.setEnabled(!value);itemIds.setEnabled(!value);from.setEnabled(!value);to.setEnabled(!value);}
+    private void setBusy(boolean value){busy=value;fetch.setEnabled(!value);configure.setEnabled(!value);from.setEnabled(!value);to.setEnabled(!value);}
     private void cancel(){generation++;if(task!=null)task.cancel(true);if(busy){setBusy(false);status.setText(R.string.pluggy_interrupted);}}
-    @Override protected void onResume(){super.onResume();if(AuthSession.isUnlocked()&&!entryConsulted&&getIntent().getBooleanExtra("consult_on_entry",false)&&settings.consultOnEntry()){entryConsulted=true;query();}}
+    @Override protected void onResume(){super.onResume();if(AuthSession.isUnlocked()&&!entryConsulted&&settings.configured()){entryConsulted=true;query();}}
     @Override protected void onPause(){cancel();super.onPause();}
     @Override protected void onDestroy(){destroyed=true;cancel();worker.shutdownNow();store.close();super.onDestroy();}
     private void error(String message){new AlertDialog.Builder(this).setTitle("Meu Pluggy").setMessage(message==null?"Não foi possível concluir. Nenhum dado anterior foi alterado.":message).setPositiveButton("OK",null).show();}
     private LinearLayout column(){LinearLayout view=new LinearLayout(this);view.setOrientation(LinearLayout.VERTICAL);return view;}
-    private TextView label(LinearLayout parent,String value,int size){TextView view=new TextView(this);view.setText(value);view.setTextColor(colors.text);view.setTextSize(size);view.setPadding(0,dp(10),0,dp(10));parent.addView(view);return view;}
+    private TextView label(LinearLayout parent,String value,int size){TextView view=new TextView(this);view.setText(value);view.setTextColor(colors.text);view.setTextSize(size);view.setPadding(0,dp(8),0,dp(8));parent.addView(view);return view;}
     private EditText field(LinearLayout parent,String hint,String value,int type){label(parent,hint,13);EditText edit=new EditText(this);edit.setContentDescription(hint);edit.setHint(hint);edit.setText(value);edit.setTextColor(colors.text);edit.setHintTextColor(colors.muted);edit.setSingleLine(true);edit.setInputType(type);edit.setMinHeight(dp(48));parent.addView(edit);return edit;}
     private Spinner spinner(LinearLayout parent,String hint,List<String> values){label(parent,hint,13);Spinner select=new Spinner(this);select.setContentDescription(hint);select.setMinimumHeight(dp(48));select.setAdapter(new ArrayAdapter<>(this,android.R.layout.simple_spinner_dropdown_item,values));select.setSelection(0);parent.addView(select);return select;}
     private Button button(String text){Button b=new Button(this);b.setText(text);b.setAllCaps(false);b.setContentDescription(text);b.setMinHeight(dp(48));return b;}

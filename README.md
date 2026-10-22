@@ -1,10 +1,10 @@
 # MyFinanceHub para Android
 
-Organizador de finanças pessoais em português. Contas, lançamentos, categorias, importações e relatórios funcionam no aparelho, com acesso local protegido. A versão 0.6.1 mantém o login por 10 minutos após sair do app e apresenta contas, saldos e movimentações Meu Pluggy em uma tela nativa, com filtros e busca. Mantém acesso local com senha/biometria e investimentos organizados por tipo, liquidez, vencimento e valor aplicado. Preserva relatórios, cotações, notificações e a confirmação obrigatória antes de gravar lançamentos.
+Organizador de finanças pessoais em português. Contas, lançamentos, categorias, importações e relatórios funcionam no aparelho, com acesso local protegido. A versão 0.6.2 bloqueia o acesso ao apagar a tela do celular ou completar 10 minutos fora do app, o que ocorrer primeiro, e apresenta contas, saldos e movimentações Meu Pluggy em uma tela nativa, com filtros e busca. Mantém acesso local com senha/biometria e investimentos organizados por tipo, liquidez, vencimento e valor aplicado. Preserva relatórios, cotações, notificações e a confirmação obrigatória antes de gravar lançamentos.
 
 ## Instalar no celular
 
-APK: [`artifacts/MyFinanceHub-0.6.1-release.apk`](artifacts/MyFinanceHub-0.6.1-release.apk). Requer **Android 8.0 ou superior**. Esta versão tem uma única edição, código de versão 10. A captura de notificações é opcional e local; não há integração com WhatsApp nem transcrição de áudio.
+APK: [`artifacts/MyFinanceHub-0.6.2-release.apk`](artifacts/MyFinanceHub-0.6.2-release.apk). Requer **Android 8.0 ou superior**. Esta versão tem uma única edição, código de versão 11. A captura de notificações é opcional e local; não há integração com WhatsApp nem transcrição de áudio.
 
 Exporte um backup na versão instalada, se ela abrir, e instale o APK por cima, **sem desinstalar**. O pacote `br.com.myfinancehub` e a assinatura de desenvolvimento são mantidos. O banco v4 recebe migração aditiva das versões v1/v2/v3; backups novos são v4 e a restauração aceita v1, v2, v3 e v4. Não abra esse banco em versões antigas do aplicativo.
 
@@ -32,7 +32,7 @@ Busca e posição de rolagem são preservadas por tela. As listas de lançamento
 
 ## Senha e biometria locais
 
-Na primeira abertura, crie um login local e uma senha de 8 a 128 caracteres, com maiúscula, minúscula, número e caractere especial. A senha não é enviada a um serviço: o aparelho guarda somente sua derivação PBKDF2-HMAC-SHA256 com sal aleatório. Após cinco erros há bloqueio temporário. Ao sair para outro aplicativo, o login permanece válido por 10 minutos. Voltar antes desse prazo dispensa a senha; após 10 minutos em segundo plano, será preciso entrar novamente. Navegar entre telas e girar o aparelho não encerram a sessão. O botão Bloquear aplicativo encerra o acesso imediatamente. A sessão é restaurada no mesmo boot, inclusive se o Android recriar o processo dentro do prazo. Reiniciar o aparelho exige novo login.
+Na primeira abertura, crie um login local e uma senha de 8 a 128 caracteres, com maiúscula, minúscula, número e caractere especial. A senha não é enviada a um serviço: o aparelho guarda somente sua derivação PBKDF2-HMAC-SHA256 com sal aleatório. Após cinco erros há bloqueio temporário. Ao sair para outro aplicativo, o login permanece válido por até 10 minutos, desde que o celular continue desbloqueado e com a tela acesa. O primeiro evento encerra a sessão: apagar/bloquear a tela ou completar 10 minutos em segundo plano. Voltar antes do prazo dispensa a senha somente se a tela não tiver apagado. Navegar entre telas e girar o aparelho não encerram a sessão. O botão Bloquear aplicativo encerra o acesso imediatamente. Desbloquear o celular não desbloqueia o app: entre novamente com senha ou biometria. Se o Android encerrar o processo, a próxima abertura exige novo login, pois o app não pode verificar bloqueios ocorridos enquanto estava encerrado. A concessão de acesso não é persistida. A atualização da 0.6.1 descarta apenas a concessão antiga de sessão, preservando senha, biometria e dados.
 
 Guarde o **código de recuperação** exibido uma vez em um gerenciador de senhas ou fora do aparelho. Ele permite trocar a senha sem apagar os dados e é renovado após recuperação. Não há conta online, recuperação por e-mail nem sincronização financeira entre celulares. Android 9 ou posterior pode oferecer biometria forte cadastrada no sistema, opcional e vinculada ao Android Keystore. Android 8 usa senha. Alterar a biometria do aparelho pode exigir nova ativação pelo login com senha.
 
@@ -130,7 +130,7 @@ Identificadores `FITID`/`id` detectam reimportações na mesma conta. Sem identi
 
 PDF, fotos e formatos proprietários não são suportados. O CSV serve para planilhas e protege campos textuais contra fórmulas. O **backup JSON** preserva os dados originais e todos os vínculos, com limite de 8 MiB por backup nesta versão. Bases maiores exigem exportação CSV e não têm restauração integral suportada. Restaurar exige confirmação e substitui todo o conteúdo atual de forma transacional; backups inválidos são rejeitados sem apagar a base.
 
-Consulte o [registro de validação da 0.6.1](docs/VALIDACAO-0.6.1.md) para testes, atualização no emulador e limites da verificação.
+Consulte o [registro de validação da 0.6.2](docs/VALIDACAO-0.6.2.md) para testes e limites da verificação.
 
 ## Desenvolvimento
 
@@ -157,8 +157,8 @@ Comandos individuais:
 `verify.sh` executa testes, lint e build da única edição. APK gerado: `app/build/outputs/apk/debug/app-debug.apk`. Relatórios dos verificadores: `app/build/reports/`. Para atualizar a cópia distribuível após concluir a validação:
 
 ```sh
-cp app/build/outputs/apk/release/app-release.apk artifacts/MyFinanceHub-0.6.1-release.apk
-sha256sum artifacts/MyFinanceHub-0.6.1-release.apk > artifacts/MyFinanceHub-0.6.1-release.apk.sha256
+cp app/build/outputs/apk/release/app-release.apk artifacts/MyFinanceHub-0.6.2-release.apk
+sha256sum artifacts/MyFinanceHub-0.6.2-release.apk > artifacts/MyFinanceHub-0.6.2-release.apk.sha256
 ```
 
 No Android Studio, configure JDK compatível e SDK 35. `local.properties`, chaves e saídas de build são ignorados. Os testes substituem as consultas de mercado por respostas fictícias: montar e validar o APK não exige chave brapi, credenciais bancárias ou backend. A validação HTTPS opcional usa apenas símbolos públicos, sem dados pessoais.
@@ -176,4 +176,4 @@ O Android não está conectado a esse backend. A execução real depende de cada
 
 Siga o [roteiro de testes no Android](docs/TESTES-NO-CELULAR.md) para verificar atualização preservando dados, temas, importações, relatórios, compartilhamento e cotações. O roteiro é uma lista de verificações, não uma declaração de testes já realizados no seu aparelho.
 
-A leitura pessoal de contas e transações Meu Pluggy está implementada; requer credenciais e conexões autorizadas do titular. Pagamentos Pix, integração direta com carteiras e sincronização automática da custódia B3 não estão implementados. Notificações compatíveis geram somente sugestões para revisão; WhatsApp e transcrição não estão integrados. Documentos de validação de versões antigas permanecem como histórico; não descrevem as opções da 0.6.1.
+A leitura pessoal de contas e transações Meu Pluggy está implementada; requer credenciais e conexões autorizadas do titular. Pagamentos Pix, integração direta com carteiras e sincronização automática da custódia B3 não estão implementados. Notificações compatíveis geram somente sugestões para revisão; WhatsApp e transcrição não estão integrados. Documentos de validação de versões antigas permanecem como histórico; não descrevem as opções da 0.6.2.

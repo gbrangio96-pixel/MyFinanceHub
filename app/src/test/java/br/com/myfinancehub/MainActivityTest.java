@@ -302,6 +302,23 @@ public final class MainActivityTest {
         assertEquals(-5678,store.totalBalance());
     }
 
+    @Test public void screenOffRevokesAnExpenseConfirmationWithoutChangingSavedData() {
+        String before=store.exportBackup();
+        tab("Lançamentos");clickText(screen(), "+  Novo lançamento");
+        AlertDialog form=dialog();edit(form,"Descrição").setText("Despesa antes do bloqueio");edit(form,"Valor (R$)").setText("12,34");
+        form.getButton(-1).performClick();idle();AlertDialog confirmation=dialog();
+        assertEquals("Confirmar e salvar",confirmation.getButton(-1).getText().toString());
+        assertTrue(store.entries().isEmpty());assertTrue(AuthSession.isUnlocked());
+        context.sendBroadcast(new Intent(Intent.ACTION_SCREEN_OFF));idle();
+        assertFalse(AuthSession.isUnlocked());assertTrue(activity.isFinishing());
+        assertEquals(View.INVISIBLE,screen().getVisibility());
+        // Retain the old button to exercise the save guard even before Android removes
+        // the finishing Activity's dialog windows.
+        confirmation.getButton(-1).performClick();idle();
+        assertTrue(store.entries().isEmpty());assertEquals(before,store.exportBackup());
+        assertFalse(confirmation.isShowing());assertFalse(form.isShowing());
+    }
+
     @Test public void invalidEntryDoesNotPersistAndCanBeCorrectedWithoutLosingForm() {
         tab("Lançamentos");
         clickText(screen(), "+  Novo lançamento");

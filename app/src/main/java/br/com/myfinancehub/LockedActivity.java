@@ -14,7 +14,10 @@ public abstract class LockedActivity extends Activity {
     }
     @Override protected void onResume(){super.onResume();if(!AuthSession.isUnlocked()){
         visibility(View.INVISIBLE);
-        startActivity(new Intent(this,LoginActivity.class).putExtra("return_to_activity",true));
+        if(!AuthSession.deviceAvailable()||isFinishing())finish();
+        else startActivity(new Intent(this,LoginActivity.class).putExtra("return_to_activity",true));
     }else visibility(View.VISIBLE);}
+    /** A dialog can outlive a pause; reject its confirmation after access is revoked. */
+    protected final boolean canConfirm(){return !isFinishing()&&!isDestroyed()&&AuthSession.isUnlocked();}
     @Override protected void onPause(){visibility(View.INVISIBLE);super.onPause();}
 }

@@ -50,19 +50,57 @@ public final class LoginActivityTest {
         edit(form,"Código de recuperação").setText(oldCode);edit(form,"Nova senha").setText(NEW_PASSWORD);edit(form,"Confirmar nova senha").setText(NEW_PASSWORD);click(recovery.getButton(-1));drainWorker();
         assertFalse(AuthSession.isUnlocked());assertNull(shadowOf(activity).getNextStartedActivity());String newCode=recoveryCode(ShadowAlertDialog.getLatestAlertDialog());assertNotEquals(oldCode,newCode);assertFalse(auth.verify(USER,PASSWORD.toCharArray()));assertTrue(auth.verify(USER,NEW_PASSWORD.toCharArray()));
     }
+    @Test public void recoveryDisablesOldBiometricsEvenIfScreenLocksBeforeWorkerCompletes()throws Exception {
+        String oldCode=auth.create(USER,PASSWORD.toCharArray());
+        java.util.Base64.Encoder encoder=java.util.Base64.getEncoder();
+        context.getSharedPreferences(LocalBiometrics.PREFS,0).edit()
+                .putString("alias","myfinancehub.biometric.11111111-1111-1111-1111-111111111111")
+                .putString("iv",encoder.encodeToString(new byte[12]))
+                .putString("proof",encoder.encodeToString(new byte[LocalBiometrics.proofForEncryption().length+16])).commit();
+        assertTrue(LocalBiometrics.enabled(context));start();CountDownLatch release=new CountDownLatch(1);
+        worker().submit(()->{try{release.await(10,TimeUnit.SECONDS);}catch(InterruptedException interrupted){Thread.currentThread().interrupt();}});
+        click(find(screen(),"Recuperar acesso com meu código"));AlertDialog recovery=ShadowAlertDialog.getLatestAlertDialog();View form=recovery.getWindow().getDecorView();
+        edit(form,"Código de recuperação").setText(oldCode);edit(form,"Nova senha").setText(NEW_PASSWORD);edit(form,"Confirmar nova senha").setText(NEW_PASSWORD);click(recovery.getButton(-1));
+        context.sendBroadcast(new Intent(Intent.ACTION_SCREEN_OFF));idle();assertTrue(activity.isFinishing());release.countDown();drainWorker();
+        assertTrue("The recovery may finish even when its UI was closed",auth.verify(USER,NEW_PASSWORD.toCharArray()));assertFalse(auth.verify(USER,PASSWORD.toCharArray()));
+        assertFalse("Old biometric proof must be revoked by the worker, not a discarded UI callback",LocalBiometrics.enabled(context));assertTrue(context.getSharedPreferences(LocalBiometrics.PREFS,0).getAll().isEmpty());
+        assertFalse(AuthSession.isUnlocked());assertNull(shadowOf(activity).getNextStartedActivity());
+    }
     @Test public void completedPasswordWorkWhileBackgroundedDoesNotUnlockUntilResume()throws Exception {
         auth.create(USER,PASSWORD.toCharArray());start();CountDownLatch release=new CountDownLatch(1);worker().submit(()->{try{release.await(10,TimeUnit.SECONDS);}catch(InterruptedException interrupted){Thread.currentThread().interrupt();}});
         edit(screen(),"Senha").setText(PASSWORD);click(find(screen(),"Entrar"));controller.pause().stop();release.countDown();drainWorker();
-        assertFalse(AuthSession.isUnlocked());assertNull(shadowOf(activity).getNextStartedActivity());controller.start().resume();idle();assertTrue(AuthSession.isUnlocked());assertNotNull(shadowOf(activity).getNextStartedActivity());
+        assertFalse(AuthSession.isUnlocked());assertNull(shadowOf(activity).getNextStartedActivity());controller.restart().resume();idle();assertTrue(AuthSession.isUnlocked());assertNotNull(shadowOf(activity).getNextStartedActivity());
+    }
+    @Test public void queuedValidPasswordCannotUnlockAfterTenMinutesOutsideTheLogin()throws Exception {
+        auth.create(USER,PASSWORD.toCharArray());SessionClock clock=new SessionClock();AuthSession.initialize(context,clock);start();
+        CountDownLatch release=new CountDownLatch(1);worker().submit(()->{try{release.await(10,TimeUnit.SECONDS);}catch(InterruptedException interrupted){Thread.currentThread().interrupt();}});
+        edit(screen(),"Senha").setText(PASSWORD);click(find(screen(),"Entrar"));controller.pause().stop();idle();release.countDown();drainWorker();
+        assertFalse(AuthSession.isUnlocked());assertNull(shadowOf(activity).getNextStartedActivity());clock.elapsed+=AuthSession.BACKGROUND_GRACE_MILLIS;
+        // Do not query the session first: resuming must itself expire the queued result.
+        controller.restart().resume();idle();assertFalse(AuthSession.isUnlocked());assertNull(shadowOf(activity).getNextStartedActivity());assertTrue(find(screen(),"Entrar").isEnabled());
+        edit(screen(),"Senha").setText(PASSWORD);click(find(screen(),"Entrar"));drainWorker();assertTrue("A fresh password attempt must remain available",AuthSession.isUnlocked());assertNotNull(shadowOf(activity).getNextStartedActivity());
+    }
+    @Test public void screenOffDuringPasswordVerificationCannotUnlockWhenWorkCompletes()throws Exception {
+        auth.create(USER,PASSWORD.toCharArray());start();CountDownLatch release=new CountDownLatch(1);worker().submit(()->{try{release.await(10,TimeUnit.SECONDS);}catch(InterruptedException interrupted){Thread.currentThread().interrupt();}});
+        edit(screen(),"Senha").setText(PASSWORD);click(find(screen(),"Entrar"));
+        context.sendBroadcast(new Intent(Intent.ACTION_SCREEN_OFF));idle();assertTrue("Lock must close the login window as well",activity.isFinishing());
+        release.countDown();drainWorker();context.sendBroadcast(new Intent(Intent.ACTION_SCREEN_ON));context.sendBroadcast(new Intent(Intent.ACTION_USER_PRESENT));idle();
+        assertFalse(AuthSession.isUnlocked());assertNull(shadowOf(activity).getNextStartedActivity());
+    }
+    @Test public void queuedPasswordResultCannotAuthorizeAfterSessionWasLocked()throws Exception {
+        auth.create(USER,PASSWORD.toCharArray());start();CountDownLatch release=new CountDownLatch(1);worker().submit(()->{try{release.await(10,TimeUnit.SECONDS);}catch(InterruptedException interrupted){Thread.currentThread().interrupt();}});
+        edit(screen(),"Senha").setText(PASSWORD);click(find(screen(),"Entrar"));controller.pause().stop();release.countDown();drainWorker();assertFalse(AuthSession.isUnlocked());
+        // Keep this Activity alive to exercise generation rejection independently of finish().
+        AuthSession.lock();controller.restart().resume();idle();assertFalse(AuthSession.isUnlocked());assertNull(shadowOf(activity).getNextStartedActivity());
+        assertTrue(find(screen(),"Entrar").isEnabled());
     }
     @Test public void unavailableBiometricsRemainDisabledAndBackLocksAccess()throws Exception {
         auth.create(USER,PASSWORD.toCharArray());start();assertFalse(find(screen(),"Entrar com biometria").isEnabled());activity.onBackPressed();assertFalse(AuthSession.isUnlocked());assertNull(shadowOf(activity).getNextStartedActivity());
     }
-    @Test public void coldLauncherUsesValidPersistedGraceAndDoesNotRenderAnotherPasswordForm()throws Exception {
-        auth.create(USER,PASSWORD.toCharArray());SessionClock clock=new SessionClock();AuthSession.initialize(context,clock);AuthSession.unlock();AuthSession.onForeground();AuthSession.onBackground();clock.elapsed+=AuthSession.BACKGROUND_GRACE_MILLIS-1;
-        AuthSession.initialize(context,clock);assertTrue("A valid same-boot lease must survive launcher recreation",AuthSession.isUnlocked());start();
-        Intent launched=shadowOf(activity).getNextStartedActivity();assertNotNull(launched);assertEquals(MainActivity.class.getName(),launched.getComponent().getClassName());assertTrue(activity.isFinishing());
-        View content=screen();if(content!=null){assertNull(find(content,"Senha"));assertNull(find(content,"Entrar"));}assertTrue(AuthSession.isUnlocked());
+    @Test public void coldLauncherRequiresPasswordEvenInsidePreviousGracePeriod()throws Exception {
+        auth.create(USER,PASSWORD.toCharArray());SessionClock clock=new SessionClock();AuthSession.initialize(context,clock);AuthSession.unlock();AuthSession.onForeground();AuthSession.onBackground();clock.elapsed+=60_000;
+        AuthSession.initialize(context,clock);assertFalse("A new process cannot prove the phone stayed unlocked",AuthSession.isUnlocked());start();
+        assertNull(shadowOf(activity).getNextStartedActivity());assertNotNull(find(screen(),"Senha"));assertNotNull(find(screen(),"Entrar"));assertFalse(AuthSession.isUnlocked());assertFalse(activity.isFinishing());
     }
     @Test public void coldLauncherKeepsPasswordLoginWhenPersistedGraceHasExpired()throws Exception {
         auth.create(USER,PASSWORD.toCharArray());SessionClock clock=new SessionClock();AuthSession.initialize(context,clock);AuthSession.unlock();AuthSession.onForeground();AuthSession.onBackground();clock.elapsed+=AuthSession.BACKGROUND_GRACE_MILLIS;

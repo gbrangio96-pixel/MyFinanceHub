@@ -50,7 +50,7 @@ public class PluggyActivityTest {
         assertTrue(containsText(allTexts(bank),"Conta bancária"));assertTrue(containsText(allTexts(bank),"R$ 9.876,54"));
         assertTrue(containsText(allTexts(credit),"Cartão de crédito"));assertTrue(containsText(allTexts(credit),"R$ 321,45"));
         List<String> rows=transactionRows();assertEquals(2,rows.size());assertTrue(containsText(rows,"Mercado pela API nativa"));assertTrue(containsText(rows,"Compra pendente pela API"));
-        assertTrue(containsText(allTexts(find(screen(),"Resumo de transações Meu Pluggy")),"2 movimentações · 1 pendentes · 0 já salvas"));
+        assertTrue(containsText(allTexts(find(screen(),"Resumo de transações Meu Pluggy")),"Movimentações: 2 · Pendentes: 1 · Já salvas: 0"));
         assertTrue(containsText(allTexts(find(screen(),"Estado da consulta Meu Pluggy")),"22/10/2026 09:00"));
         assertNull("Reading the provider API must remain inside the app",shadowOf(activity).getNextStartedActivity());assertTrue(store.entries().isEmpty());assertEquals(0,store.totalBalance());
     }
@@ -85,6 +85,16 @@ public class PluggyActivityTest {
         click(confirmation,-2);assertTrue(form.isShowing());assertTrue(store.entries().isEmpty());click(form,-1);click(dialog(),-1);
         assertEquals(1,store.entries().size());assertEquals(-2590,store.totalBalance());Models.Entry entry=store.entries().get(0);assertEquals(snapshot.transactions.get(0).sourceKey,entry.sourceKey);assertEquals("pix",entry.method);
         activity.review(snapshot.transactions.get(0));idle();assertEquals(1,store.entries().size());assertEquals(-2590,store.totalBalance());
+    }
+    @Test public void screenOffRevokesPostedTransactionConfirmationWithoutChangingSavedData()throws Exception {
+        String before=store.exportBackup();PluggyClient.Snapshot snapshot=PluggyFixtures.snapshot();activity.showSnapshot(snapshot);idle();
+        activity.review(snapshot.transactions.get(0));idle();AlertDialog form=dialog();choose(form,"Conta local",1);click(form,-1);AlertDialog confirmation=dialog();
+        assertEquals("Confirmar e salvar",confirmation.getButton(-1).getText().toString());assertTrue(AuthSession.isUnlocked());assertTrue(store.entries().isEmpty());
+        context.sendBroadcast(new Intent(Intent.ACTION_SCREEN_OFF));idle();
+        assertFalse(AuthSession.isUnlocked());assertTrue(activity.isFinishing());assertEquals(View.INVISIBLE,screen().getVisibility());
+        // Simulate a stale dialog callback retained while Android tears down its window.
+        confirmation.getButton(-1).performClick();idle();
+        assertTrue(store.entries().isEmpty());assertEquals(before,store.exportBackup());assertFalse(confirmation.isShowing());assertFalse(form.isShowing());
     }
     @Test public void pendingTransactionCannotOpenSavingForm()throws Exception {JSONObject root=PluggyFixtures.data();root.getJSONArray("transactions").getJSONObject(0).put("status","PENDING");PluggyClient.Snapshot snapshot=PluggyClientTest.parse(root);activity.showSnapshot(snapshot);idle();activity.review(snapshot.transactions.get(0));idle();assertEquals("OK",dialog().getButton(-1).getText().toString());assertTrue(store.entries().isEmpty());assertEquals(0,store.totalBalance());}
     @Test public void creditRequiresCardAndDoesNotAffectCash()throws Exception {store.saveCard(new Models.Card(0,"Meu cartão","1234",20,5));JSONObject root=PluggyFixtures.data();root.getJSONArray("accounts").getJSONObject(0).put("kind","CREDIT");PluggyClient.Snapshot snapshot=PluggyClientTest.parse(root);activity.showSnapshot(snapshot);idle();activity.review(snapshot.transactions.get(0));idle();AlertDialog form=dialog();choose(form,"Conta local",1);click(form,-1);assertTrue(form.isShowing());assertTrue(store.entries().isEmpty());click(dialog(),-1);choose(form,"Cartão local",1);click(form,-1);click(dialog(),-1);assertEquals("credit",store.entries().get(0).method);assertEquals(0,store.totalBalance());assertEquals(store.cards().get(0).id,store.entries().get(0).cardId);}

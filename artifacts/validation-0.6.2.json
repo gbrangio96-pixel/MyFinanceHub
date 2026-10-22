@@ -1,0 +1,43 @@
+{
+  "version": "0.6.2",
+  "versionCode": 11,
+  "applicationId": "br.com.myfinancehub",
+  "buildType": "release",
+  "debuggable": false,
+  "date": "2026-10-22",
+  "baseCommit": "bce2fd33ba18ef024b118e75ae71f454d9c2f0ac",
+  "tests": {
+    "tests": 410,
+    "failures": 0,
+    "errors": 0,
+    "skipped": 0
+  },
+  "lintDebug": "No issues found.",
+  "lintRelease": "No issues found.",
+  "apk": "artifacts/MyFinanceHub-0.6.2-release.apk",
+  "apkBytes": 197264,
+  "sha256": "b04e768a8f7470135d6c8846caaad2703ddcbace99d803373192993c21076b4e",
+  "certificateSha256": "3aed65b8149ccd92287cc1055b57a5ae6b909f12d9282ffab221c24a8dadb446",
+  "sameCertificateAs061": true,
+  "zipalign": true,
+  "sessionGraceMillis": 600000,
+  "sessionClock": "SystemClock.elapsedRealtime + boot count; in-process only",
+  "lockPolicy": "screen-off/device locked OR ten minutes in background, whichever comes first",
+  "coldStartRestoresSession": false,
+  "legacyPersistedGrantDiscarded": true,
+  "staleAuthenticationCallbacksRejected": true,
+  "passwordResetRevokesBiometricsWithoutUiCallback": true,
+  "staleExpenseConfirmationsRejected": true,
+  "screenOffLifecycleTestApis": [
+    28,
+    35
+  ],
+  "databaseVersion": 4,
+  "databaseSchemaChanged": false,
+  "backupFormatChanged": false,
+  "pluggyDataPresentation": "unchanged native Android dashboard and personal API client",
+  "realProviderCredentialsUsed": false,
+  "realFinancialDataRead": false,
+  "physicalDeviceTested": false,
+  "playStorePublished": false
+}

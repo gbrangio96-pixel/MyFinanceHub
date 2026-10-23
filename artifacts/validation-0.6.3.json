@@ -1,0 +1,53 @@
+{
+  "version": "0.6.3",
+  "versionCode": 12,
+  "applicationId": "br.com.myfinancehub",
+  "buildType": "release",
+  "debuggable": false,
+  "date": "2026-10-23",
+  "baseCommit": "241120e657c3b5ea1eff5c2ae81e0e01f6d35ad5",
+  "tests": {
+    "tests": 435,
+    "failures": 0,
+    "errors": 0,
+    "skipped": 0
+  },
+  "lintDebug": "No issues found.",
+  "lintRelease": "No issues found.",
+  "apk": "artifacts/MyFinanceHub-0.6.3-release.apk",
+  "apkBytes": 204628,
+  "sha256": "280c6619aeed07bd5309b2bd50aeb4818e158efa8d67035c80a8718911975605",
+  "certificateSha256": "3aed65b8149ccd92287cc1055b57a5ae6b909f12d9282ffab221c24a8dadb446",
+  "sameCertificateAs062": true,
+  "zipalign": true,
+  "biometricProtocolTestApis": [
+    28,
+    35
+  ],
+  "biometricAadAfterAuthentication": true,
+  "invalidBiometricGrantAllowsPasswordReenrollment": true,
+  "biometricPromptSurvivesHostPause": true,
+  "staleAuthenticationCallbacksRejected": true,
+  "sessionGraceMillis": 600000,
+  "lockPolicy": "screen-off/device locked OR ten minutes in background; no cold-start restoration",
+  "pluggyPlanRequested": "personal_free",
+  "pluggyConnectionHelp": "native guide with explicit official links",
+  "connectTokenFlow": [
+    "POST /auth",
+    "POST /connect_token {}"
+  ],
+  "connectTokenRequiresItemIds": false,
+  "connectTokenLocalDisplayLifetimeMillis": 1800000,
+  "connectTokenPersisted": false,
+  "realConnectTokenIssued": false,
+  "providerCredentialsEmbedded": false,
+  "backendDeployed": false,
+  "databaseVersion": 4,
+  "databaseSchemaChanged": false,
+  "backupFormatChanged": false,
+  "realProviderCredentialsUsed": false,
+  "realFinancialDataRead": false,
+  "physicalDeviceTested": false,
+  "playStorePublished": false,
+  "validationSequence": "full verify with 435 passing tests; identical status text moved into Android resources; final debug/release lint, packaging, signature and alignment verification"
+}

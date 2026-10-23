@@ -41,6 +41,73 @@ public class PluggyActivityTest {
         }
         click(configuration,-2);assertFalse(activity.settings.configured());assertTrue(store.entries().isEmpty());assertNull(shadowOf(activity).getNextStartedActivity());
     }
+    @Test public void connectionGuideShowsExactDashboardLocationsWithoutOpeningAWebsite() {
+        View help=find(screen(),"Onde encontrar os dados da conexão");assertNotNull(help);assertTrue(help.performClick());idle();
+        AlertDialog guide=dialog();assertTrue(guide.isShowing());List<String> text=allTexts(guide.getWindow().getDecorView());
+        for(String required:new String[]{"Criar a conta Meu Pluggy não configura automaticamente", "Applications", "Client ID fica na linha", "Client Secret aparece somente uma vez", "Generate new secret", "invalida imediatamente o anterior", "Demo → Connect Account", "MeuPluggy, não o banco nem Sandbox", "Customization → Connectors → Personal → Direct Connectors", "Connected Items", "itemId"})
+            assertTrue("Guide must explain: "+required,containsText(text,required));
+        assertNull("Reading the native guide must not open the browser",shadowOf(activity).getNextStartedActivity());assertFalse(activity.settings.configured());assertTrue(store.entries().isEmpty());
+    }
+    @Test public void settingsReuseGuideAndOfficialLinksOpenOnlyAfterExplicitTap() {
+        activity.showConnectionSettings();idle();AlertDialog configuration=dialog();
+        ((EditText)find(configuration.getWindow().getDecorView(),"Client Secret pessoal")).setText("fixture-secret-not-for-browser");
+        assertTrue(find(configuration.getWindow().getDecorView(),"Onde encontrar os dados da conexão").performClick());idle();AlertDialog guide=dialog();
+        assertNotSame(configuration,guide);assertTrue(configuration.isShowing());assertNull(shadowOf(activity).getNextStartedActivity());
+        String[][] links={{"Abrir Meu Pluggy","https://meu.pluggy.ai"},{"Abrir Dashboard Pluggy","https://dashboard.pluggy.ai"},{"Abrir guia oficial em português","https://meu.pluggy.ai/api-guide"}};
+        for(String[] link:links){
+            View button=find(guide.getWindow().getDecorView(),link[0]);assertNotNull(button);assertTrue(button.performClick());idle();
+            Intent opened=shadowOf(activity).getNextStartedActivity();assertNotNull(opened);assertEquals(Intent.ACTION_VIEW,opened.getAction());assertEquals(link[1],opened.getDataString());assertNull(opened.getExtras());assertNull(opened.getData().getQuery());
+            assertNull("One explicit tap opens only its official destination",shadowOf(activity).getNextStartedActivity());
+        }
+        assertFalse(activity.settings.configured());assertTrue(store.entries().isEmpty());click(guide,-1);click(configuration,-2);
+    }
+    @Test public void screenOffRejectsStaleGuideLinksAndConfigurationSave()throws Exception {
+        assertTrue(find(screen(),"Onde encontrar os dados da conexão").performClick());idle();AlertDialog guide=dialog();View oldLink=find(guide.getWindow().getDecorView(),"Abrir Dashboard Pluggy");click(guide,-1);
+        activity.showConnectionSettings();idle();AlertDialog configuration=dialog();
+        ((EditText)find(configuration.getWindow().getDecorView(),"Client ID pessoal")).setText("fixture-client");
+        ((EditText)find(configuration.getWindow().getDecorView(),"Client Secret pessoal")).setText("fixture-secret");
+        ((EditText)find(configuration.getWindow().getDecorView(),"IDs das conexões MeuPluggy (separados por vírgula)")).setText("item-a");
+        String before=store.exportBackup();context.sendBroadcast(new Intent(Intent.ACTION_SCREEN_OFF));idle();assertFalse(AuthSession.isUnlocked());assertTrue(activity.isFinishing());
+        assertTrue(oldLink.performClick());click(configuration,-1);
+        assertNull(shadowOf(activity).getNextStartedActivity());assertFalse(activity.settings.configured());assertEquals(before,store.exportBackup());
+        Field task=PluggyActivity.class.getDeclaredField("task");task.setAccessible(true);assertNull("A stale save must not start a provider query",task.get(activity));
+    }
+    @Test public void typedProjectKeysCreateConnectTokenWithoutItemIdsOrPersistence()throws Exception {
+        TokenApi api=new TokenApi();activity.client=tokenClient(api);String before=store.exportBackup();
+        AlertDialog configuration=requestToken("fixture-client","fixture-secret");drainWorker();AlertDialog result=dialog();
+        assertNotSame(configuration,result);assertEquals(Arrays.asList("/auth","/connect_token"),api.paths);
+        TextView value=(TextView)find(result.getWindow().getDecorView(),"Connect Token gerado");assertEquals(TokenApi.TOKEN,value.getText().toString());assertFalse(value.isTextSelectable());assertFalse(value.isSaveEnabled());assertNotEquals(0,result.getWindow().getAttributes().flags&WindowManager.LayoutParams.FLAG_SECURE);
+        assertEquals("",((EditText)find(configuration.getWindow().getDecorView(),"Client ID pessoal")).getText().toString());assertEquals("",((EditText)find(configuration.getWindow().getDecorView(),"Client Secret pessoal")).getText().toString());
+        assertTrue(find(result.getWindow().getDecorView(),"Copiar Connect Token").performClick());idle();ClipboardManager clipboard=(ClipboardManager)context.getSystemService(Context.CLIPBOARD_SERVICE);assertEquals(TokenApi.TOKEN,clipboard.getPrimaryClip().getItemAt(0).getText().toString());assertTrue(clipboard.getPrimaryClipDescription().getExtras().getBoolean("android.content.extra.IS_SENSITIVE"));
+        assertFalse(activity.settings.configured());assertTrue(context.getSharedPreferences("personal_pluggy_private",0).getAll().isEmpty());assertEquals(before,store.exportBackup());assertNull(shadowOf(activity).getNextStartedActivity());
+        click(result,-1);assertEquals("",value.getText().toString());
+    }
+    @Test public void tokenGenerationReusesPrivateSavedKeysWithoutChangingSettings()throws Exception {
+        activity.settings=fictionalSettings();Map<String,?> saved=new HashMap<>(context.getSharedPreferences("personal_pluggy_private",0).getAll());TokenApi api=new TokenApi();activity.client=tokenClient(api);
+        requestToken("","");drainWorker();AlertDialog result=dialog();assertEquals(TokenApi.TOKEN,((TextView)find(result.getWindow().getDecorView(),"Connect Token gerado")).getText().toString());
+        assertEquals(Arrays.asList("/auth","/connect_token"),api.paths);assertEquals(saved,context.getSharedPreferences("personal_pluggy_private",0).getAll());assertTrue(store.entries().isEmpty());assertNull(shadowOf(activity).getNextStartedActivity());click(result,-1);
+    }
+    @Test public void tokenGenerationRequiresBothProjectKeysBeforeAnyNetworkRequest()throws Exception {
+        TokenApi api=new TokenApi();activity.client=tokenClient(api);AlertDialog empty=requestToken("","");assertTrue(containsText(allTexts(dialog().getWindow().getDecorView()),"Preencha Client ID e Client Secret"));assertTrue(api.paths.isEmpty());click(dialog(),-1);click(empty,-2);
+        AlertDialog partial=requestToken("fixture-client","");assertTrue(containsText(allTexts(dialog().getWindow().getDecorView()),"Preencha Client ID e Client Secret juntos"));assertTrue(api.paths.isEmpty());assertFalse(activity.settings.configured());assertTrue(store.entries().isEmpty());click(dialog(),-1);click(partial,-2);
+    }
+    @Test public void displayedConnectTokenExpiresAndIsWipedOnPauseAndScreenOff()throws Exception {
+        TokenApi api=new TokenApi();activity.client=tokenClient(api);requestToken("fixture-client","fixture-secret");drainWorker();AlertDialog first=dialog();TextView expired=(TextView)find(first.getWindow().getDecorView(),"Connect Token gerado");View expiredCopy=find(first.getWindow().getDecorView(),"Copiar Connect Token");
+        shadowOf(Looper.getMainLooper()).idleFor(Duration.ofMinutes(30));assertEquals("",expired.getText().toString());assertFalse(expiredCopy.isEnabled());assertTrue(containsText(allTexts(first.getWindow().getDecorView()),"Token expirado"));click(first,-1);
+        requestToken("fixture-client","fixture-secret");drainWorker();AlertDialog second=dialog();TextView paused=(TextView)find(second.getWindow().getDecorView(),"Connect Token gerado");View pausedCopy=find(second.getWindow().getDecorView(),"Copiar Connect Token");controller.pause();idle();assertEquals("",paused.getText().toString());assertFalse(pausedCopy.isEnabled());assertFalse(second.isShowing());controller.resume();idle();
+        requestToken("fixture-client","fixture-secret");drainWorker();AlertDialog third=dialog();TextView blocked=(TextView)find(third.getWindow().getDecorView(),"Connect Token gerado");context.sendBroadcast(new Intent(Intent.ACTION_SCREEN_OFF));idle();assertEquals("",blocked.getText().toString());assertFalse(third.isShowing());assertTrue(activity.isFinishing());assertFalse(AuthSession.isUnlocked());assertTrue(store.entries().isEmpty());
+    }
+    @Test public void screenOffCancelsTokenGenerationAndRejectsItsLateResult()throws Exception {
+        TokenApi api=new TokenApi();api.entered=new CountDownLatch(1);api.release=new CountDownLatch(1);activity.client=tokenClient(api);String before=store.exportBackup();
+        AlertDialog configuration=requestToken("fixture-client","fixture-secret");assertTrue(api.entered.await(10,TimeUnit.SECONDS));
+        try{
+            assertFalse(find(screen(),"Atualizar dados").isEnabled());assertFalse(find(screen(),"Configurar conexão").isEnabled());
+            assertTrue(configuration.getButton(-1).performClick());assertTrue(find(configuration.getWindow().getDecorView(),"Gerar Connect Token").performClick());idle();
+            context.sendBroadcast(new Intent(Intent.ACTION_SCREEN_OFF));idle();assertTrue(activity.isFinishing());assertFalse(AuthSession.isUnlocked());
+        }finally{api.release.countDown();}
+        drainWorker();assertEquals(Arrays.asList("/auth","/connect_token"),api.paths);assertSame("Cancelled work must not display another dialog",configuration,dialog());assertFalse(activity.settings.configured());assertEquals(before,store.exportBackup());assertNull(shadowOf(activity).getNextStartedActivity());
+        Field displayed=PluggyActivity.class.getDeclaredField("connectTokenValue");displayed.setAccessible(true);assertNull(displayed.get(activity));
+    }
     @Test public void actualPersonalApiQueryRendersNativeAccountsAndTransactionsWithoutOpeningAWebsite()throws Exception {
         NativeApi api=prepareNativeQuery();activity.query();drainWorker();
         assertEquals("Authentication, item, accounts and both transaction pages",5,api.calls.size());
@@ -115,6 +182,23 @@ public class PluggyActivityTest {
     private NativeApi prepareNativeQuery()throws Exception {
         NativeApi api=new NativeApi();activity.settings=fictionalSettings();activity.client=new PluggyPersonalClient(api,Clock.fixed(Instant.parse("2026-10-22T12:00:00Z"),ZoneOffset.UTC));
         ((EditText)find(screen(),"Data inicial")).setText("2026-10-20");((EditText)find(screen(),"Data final")).setText("2026-10-22");return api;
+    }
+    private AlertDialog requestToken(String clientId,String secret){
+        activity.showConnectionSettings();idle();AlertDialog configuration=dialog();((EditText)find(configuration.getWindow().getDecorView(),"Client ID pessoal")).setText(clientId);((EditText)find(configuration.getWindow().getDecorView(),"Client Secret pessoal")).setText(secret);assertTrue(find(configuration.getWindow().getDecorView(),"Gerar Connect Token").performClick());idle();return configuration;
+    }
+    private PluggyPersonalClient tokenClient(TokenApi api){return new PluggyPersonalClient(api,Clock.fixed(Instant.parse("2026-10-22T12:00:00Z"),ZoneOffset.UTC));}
+    private static final class TokenApi implements PluggyPersonalClient.Transport {
+        static final String TOKEN="fixture-connect-token";final List<String> paths=new ArrayList<>();CountDownLatch entered,release;
+        public PluggyPersonalClient.Response request(String method,URI uri,Map<String,String> headers,String body)throws IOException {
+            assertEquals("https",uri.getScheme());assertEquals("api.pluggy.ai",uri.getHost());assertEquals("POST",method);assertNull(uri.getQuery());paths.add(uri.getPath());
+            try{
+                JSONObject payload=new JSONObject(body);
+                if(uri.getPath().equals("/auth")){assertEquals(2,payload.length());assertEquals("fixture-client",payload.getString("clientId"));assertEquals("fixture-secret",payload.getString("clientSecret"));assertFalse(headers.containsKey("X-API-KEY"));return new PluggyPersonalClient.Response(200,"{\"apiKey\":\"fixture-api-key\"}");}
+                assertEquals("/connect_token",uri.getPath());assertEquals(0,payload.length());assertEquals("fixture-api-key",headers.get("X-API-KEY"));
+                if(entered!=null){entered.countDown();long deadline=System.nanoTime()+TimeUnit.SECONDS.toNanos(10);boolean done=false;while(!done&&System.nanoTime()<deadline){try{done=release.await(100,TimeUnit.MILLISECONDS);}catch(InterruptedException ignored){/* Simulate a transport that returns after cancellation. */}}assertTrue("Test must release the pending response",done);}
+                return new PluggyPersonalClient.Response(200,new JSONObject().put("accessToken",TOKEN).toString());
+            }catch(JSONException ex){throw new IOException("Invalid fictional token response",ex);}
+        }
     }
     private List<String> transactionRows(){
         ListView list=(ListView)find(screen(),"Transações Meu Pluggy");List<String> rows=new ArrayList<>();

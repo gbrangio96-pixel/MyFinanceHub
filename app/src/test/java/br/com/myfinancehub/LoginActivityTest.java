@@ -94,8 +94,37 @@ public final class LoginActivityTest {
         AuthSession.lock();controller.restart().resume();idle();assertFalse(AuthSession.isUnlocked());assertNull(shadowOf(activity).getNextStartedActivity());
         assertTrue(find(screen(),"Entrar").isEnabled());
     }
+    @Test public void systemPromptPauseDoesNotCancelButActualBackgroundDoes()throws Exception {
+        auth.create(USER,PASSWORD.toCharArray());start();android.os.CancellationSignal signal=new android.os.CancellationSignal();
+        Field pending=LocalBiometrics.class.getDeclaredField("pending");pending.setAccessible(true);pending.set(null,signal);
+        controller.pause();assertFalse("The system biometric surface may pause its host",signal.isCanceled());
+        controller.stop();assertTrue("A background app must cancel the system prompt",signal.isCanceled());
+    }
+    @Test public void authenticatedBiometricResultWaitsForThePausedHostToResume()throws Exception {
+        auth.create(USER,PASSWORD.toCharArray());start();LocalBiometrics.Callback callback=activity.biometricCallback(AuthSession.generation());
+        controller.pause();callback.success();idle();assertFalse(AuthSession.isUnlocked());assertNull(shadowOf(activity).getNextStartedActivity());
+        controller.resume();idle();assertTrue(AuthSession.isUnlocked());assertNotNull(shadowOf(activity).getNextStartedActivity());
+    }
+    @Test public void phoneLockRejectsBiometricResultQueuedWhileHostWasPaused()throws Exception {
+        auth.create(USER,PASSWORD.toCharArray());start();LocalBiometrics.Callback callback=activity.biometricCallback(AuthSession.generation());
+        controller.pause();callback.success();idle();context.sendBroadcast(new Intent(Intent.ACTION_SCREEN_OFF));idle();
+        assertTrue(activity.isFinishing());callback.success();assertFalse(AuthSession.isUnlocked());assertNull(shadowOf(activity).getNextStartedActivity());
+    }
+    @Test public void queuedBiometricSuccessExpiresAfterTenMinutesOutsideLogin()throws Exception {
+        auth.create(USER,PASSWORD.toCharArray());SessionClock clock=new SessionClock();AuthSession.initialize(context,clock);start();LocalBiometrics.Callback callback=activity.biometricCallback(AuthSession.generation());
+        controller.pause();callback.success();controller.stop();idle();clock.elapsed+=AuthSession.BACKGROUND_GRACE_MILLIS;
+        controller.restart().resume();idle();assertFalse(AuthSession.isUnlocked());assertNull(shadowOf(activity).getNextStartedActivity());
+    }
+    @Test public void unusableBiometricKeyCanBeReactivatedAfterPassword()throws Exception {
+        auth.create(USER,PASSWORD.toCharArray());org.robolectric.shadows.ShadowFingerprintManager fingerprint=shadowOf(context.getSystemService(android.hardware.fingerprint.FingerprintManager.class));fingerprint.setIsHardwareDetected(true);fingerprint.setHasEnrolledFingerprints(true);
+        java.util.Base64.Encoder encoder=java.util.Base64.getEncoder();context.getSharedPreferences(LocalBiometrics.PREFS,0).edit().putString("alias","myfinancehub.biometric.11111111-1111-1111-1111-111111111111").putString("iv",encoder.encodeToString(new byte[12])).putString("proof",encoder.encodeToString(new byte[LocalBiometrics.proofForEncryption().length+16])).commit();
+        start();click(find(screen(),"Entrar com biometria"));assertFalse("A missing/invalidated Keystore key must stop marking biometrics active",LocalBiometrics.enabled(context));assertFalse(AuthSession.isUnlocked());
+        click(ShadowAlertDialog.getLatestAlertDialog().getButton(-1));edit(screen(),"Senha").setText(PASSWORD);click(find(screen(),"Entrar"));drainWorker();
+        AlertDialog enrollment=ShadowAlertDialog.getLatestAlertDialog();assertEquals("Ativar",enrollment.getButton(-1).getText().toString());assertTrue(AuthSession.isUnlocked());assertNull(shadowOf(activity).getNextStartedActivity());
+        click(enrollment.getButton(-2));assertNotNull(shadowOf(activity).getNextStartedActivity());
+    }
     @Test public void unavailableBiometricsRemainDisabledAndBackLocksAccess()throws Exception {
-        auth.create(USER,PASSWORD.toCharArray());start();assertFalse(find(screen(),"Entrar com biometria").isEnabled());activity.onBackPressed();assertFalse(AuthSession.isUnlocked());assertNull(shadowOf(activity).getNextStartedActivity());
+        auth.create(USER,PASSWORD.toCharArray());start();assertFalse(find(screen(),"Entrar com biometria").isEnabled());assertTrue(texts(screen()).contains("cadastre uma digital"));activity.onBackPressed();assertFalse(AuthSession.isUnlocked());assertNull(shadowOf(activity).getNextStartedActivity());
     }
     @Test public void coldLauncherRequiresPasswordEvenInsidePreviousGracePeriod()throws Exception {
         auth.create(USER,PASSWORD.toCharArray());SessionClock clock=new SessionClock();AuthSession.initialize(context,clock);AuthSession.unlock();AuthSession.onForeground();AuthSession.onBackground();clock.elapsed+=60_000;

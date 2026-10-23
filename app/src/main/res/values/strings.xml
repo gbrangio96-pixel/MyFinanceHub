@@ -27,4 +27,9 @@
     <string name="pluggy_no_matches_native">Nenhuma movimentação neste filtro ou período.</string>
     <string name="pluggy_no_transactions_native">As movimentações consultadas aparecerão aqui, sem salvar automaticamente.</string>
     <string name="pluggy_range_native">Dados de %1$s a %2$s</string>
+    <string name="pluggy_token_generating">Gerando Connect Token… Nenhuma conta será conectada automaticamente.</string>
+    <string name="pluggy_token_generated">Solicitação de Connect Token concluída. Nenhum banco foi conectado ou lançamento salvo.</string>
+    <string name="pluggy_token_failed">Não foi possível gerar o Connect Token.</string>
+    <string name="pluggy_token_expired">Token expirado. Feche esta janela e gere outro para usar o Pluggy Connect.</string>
+    <string name="pluggy_token_interrupted">Geração de Connect Token interrompida.</string>
 </resources>

@@ -135,10 +135,94 @@ public final class LocalBiometrics {
 
     /** Authenticated GCM verification, shared with the offline crypto regression tests. */
     static boolean validProof(Cipher cipher, byte[] ciphertext) throws Exception {
+        cipher.updateAAD(PREFS.getBytes(StandardCharsets.UTF_8));
         return MessageDigest.isEqual(PROOF, cipher.doFinal(ciphertext));
     }
 
+    static byte[] encryptProof(Cipher cipher) throws Exception {
+        cipher.updateAAD(PREFS.getBytes(StandardCharsets.UTF_8));
+        return cipher.doFinal(PROOF);
+    }
+
     static byte[] proofForEncryption() { return PROOF.clone(); }
+
+    private static void invalidateGrant(Context context, String alias) {
+        SharedPreferences preferences = preferences(context);
+        // An old failed operation must not remove a newer enrollment.
+        if (alias.equals(preferences.getString("alias", ""))) preferences.edit().clear().apply();
+        deleteKey(alias);
+    }
+
+    interface AuthenticationEvents {
+        void success(Cipher authenticatedCipher);
+        void error(int code);
+    }
+    interface PromptDriver {
+        void authenticate(Activity activity, boolean enrolling, Cipher cipher,
+                          CancellationSignal cancellation, AuthenticationEvents events);
+    }
+
+    /** Shared prompt/crypto protocol; the platform driver never substitutes an unauthenticated result. */
+    // Production reaches this only through Api28.start(), after start() checks SDK >= 28.
+    @android.annotation.SuppressLint("NewApi")
+    static void authenticatePrepared(Activity activity, Callback callback, boolean enrolling,
+                                     String alias, String previousAlias, Cipher cipher, byte[] encrypted,
+                                     PromptDriver driver) {
+        SharedPreferences preferences = preferences(activity);
+        AtomicBoolean completed = new AtomicBoolean();
+        int generation = GENERATION.get();
+        CancellationSignal cancellation = new CancellationSignal();
+        synchronized (LocalBiometrics.class) { pending = cancellation; }
+        cancellation.setOnCancelListener(() -> {
+            if (completed.compareAndSet(false, true)) {
+                if (enrolling) deleteKey(alias);
+                if (GENERATION.get() == generation && !activity.isFinishing() && !activity.isDestroyed())
+                    callback.failure("Biometria cancelada. Use sua senha para entrar.");
+            }
+        });
+        try {
+            driver.authenticate(activity, enrolling, cipher, cancellation, new AuthenticationEvents() {
+                @Override public void success(Cipher authenticatedCipher) {
+                    if (GENERATION.get() != generation || activity.isFinishing() || activity.isDestroyed()
+                            || !completed.compareAndSet(false, true)) return;
+                    synchronized (LocalBiometrics.class) { if (pending == cancellation) pending = null; }
+                    try {
+                        if (authenticatedCipher != cipher) throw new IllegalStateException();
+                        // Auth-per-use Keystore operations may reject updateAAD before the prompt
+                        // succeeds. Send no cipher data until the system authenticates this operation.
+                        if (enrolling) {
+                            byte[] proof = encryptProof(cipher);
+                            if (!preferences.edit().putString("alias", alias)
+                                    .putString("iv", Base64.encodeToString(cipher.getIV(), Base64.NO_WRAP))
+                                    .putString("proof", Base64.encodeToString(proof, Base64.NO_WRAP)).commit())
+                                throw new IllegalStateException();
+                            deleteKey(previousAlias);
+                        } else if (!validProof(cipher, encrypted)) throw new IllegalStateException();
+                    } catch (Exception invalidated) {
+                        if (enrolling) deleteKey(alias); else invalidateGrant(activity, alias);
+                        callback.failure("Biometria não pôde liberar o acesso. Entre com a senha para ativá-la novamente.");
+                        return;
+                    }
+                    callback.success();
+                }
+                @Override public void error(int code) {
+                    if (!completed.compareAndSet(false, true)) return;
+                    synchronized (LocalBiometrics.class) { if (pending == cancellation) pending = null; }
+                    if (enrolling) deleteKey(alias);
+                    if (GENERATION.get() == generation && !activity.isFinishing() && !activity.isDestroyed())
+                        callback.failure(code == BiometricPrompt.BIOMETRIC_ERROR_LOCKOUT
+                                || code == BiometricPrompt.BIOMETRIC_ERROR_LOCKOUT_PERMANENT
+                                ? "Biometria temporariamente bloqueada no Android. Use sua senha para entrar."
+                                : "Biometria não concluída. Use sua senha para entrar.");
+                }
+            });
+        } catch (RuntimeException unavailable) {
+            if (!completed.compareAndSet(false, true)) return;
+            synchronized (LocalBiometrics.class) { if (pending == cancellation) pending = null; }
+            if (enrolling) deleteKey(alias);
+            callback.failure("Não foi possível abrir a biometria. Use sua senha para entrar.");
+        }
+    }
 
     // Only start() reaches this platform bridge, after explicitly checking SDK >= 28.
     @android.annotation.SuppressLint("NewApi")
@@ -147,8 +231,6 @@ public final class LocalBiometrics {
             SharedPreferences preferences = preferences(activity);
             String previousAlias = preferences.getString("alias", "");
             String alias = enrolling ? PREFIX + UUID.randomUUID() : previousAlias;
-            AtomicBoolean completed = new AtomicBoolean();
-            int generation = GENERATION.get();
             try {
                 KeyStore store = KeyStore.getInstance("AndroidKeyStore");
                 store.load(null);
@@ -179,60 +261,32 @@ public final class LocalBiometrics {
                     byte[] iv = Base64.decode(preferences.getString("iv", ""), Base64.NO_WRAP);
                     cipher.init(Cipher.DECRYPT_MODE, key, new GCMParameterSpec(128, iv));
                 }
-                // Bind ciphertext to this app purpose as well as the device's authentication key.
-                cipher.updateAAD(PREFS.getBytes(StandardCharsets.UTF_8));
-                CancellationSignal cancellation = new CancellationSignal();
-                synchronized (LocalBiometrics.class) { pending = cancellation; }
-                cancellation.setOnCancelListener(() -> {
-                    if (completed.compareAndSet(false, true)) {
-                        if (enrolling) deleteKey(alias);
-                        if (GENERATION.get() == generation && !activity.isFinishing() && !activity.isDestroyed())
-                            callback.failure("Biometria cancelada. Use sua senha para entrar.");
-                    }
-                });
-                BiometricPrompt.Builder builder = new BiometricPrompt.Builder(activity)
-                        .setTitle(enrolling ? "Ativar entrada por biometria" : "Entrar no MyFinanceHub")
-                        .setSubtitle("Confirme uma biometria cadastrada neste aparelho")
-                        .setNegativeButton("Usar senha", activity.getMainExecutor(), (dialog, which) -> cancellation.cancel());
-                if (Build.VERSION.SDK_INT >= 30)
-                    builder.setAllowedAuthenticators(BiometricManager.Authenticators.BIOMETRIC_STRONG);
-                builder.build().authenticate(new BiometricPrompt.CryptoObject(cipher), cancellation,
-                        activity.getMainExecutor(), new BiometricPrompt.AuthenticationCallback() {
-                    @Override public void onAuthenticationSucceeded(BiometricPrompt.AuthenticationResult result) {
-                        if (GENERATION.get() != generation || activity.isFinishing() || activity.isDestroyed()
-                                || !completed.compareAndSet(false, true)) return;
-                        synchronized (LocalBiometrics.class) { if (pending == cancellation) pending = null; }
-                        try {
-                            if (result.getCryptoObject() == null || result.getCryptoObject().getCipher() != cipher)
-                                throw new IllegalStateException();
-                            if (enrolling) {
-                                byte[] proof = cipher.doFinal(PROOF);
-                                if (!preferences.edit().putString("alias", alias)
-                                        .putString("iv", Base64.encodeToString(cipher.getIV(), Base64.NO_WRAP))
-                                        .putString("proof", Base64.encodeToString(proof, Base64.NO_WRAP)).commit())
-                                    throw new IllegalStateException();
-                                deleteKey(previousAlias);
-                            } else if (!validProof(cipher, encrypted)) throw new IllegalStateException();
-                            callback.success();
-                        } catch (Exception invalidated) {
-                            if (enrolling) deleteKey(alias);
-                            callback.failure("Biometria não pôde liberar o acesso. Entre com a senha e ative-a novamente.");
-                        }
-                    }
-                    @Override public void onAuthenticationError(int errorCode, CharSequence errorMessage) {
-                        if (!completed.compareAndSet(false, true)) return;
-                        synchronized (LocalBiometrics.class) { if (pending == cancellation) pending = null; }
-                        if (enrolling) deleteKey(alias);
-                        if (GENERATION.get() == generation && !activity.isDestroyed())
-                            callback.failure("Biometria não concluída. Use sua senha para entrar.");
-                    }
-                    // A nonmatching biometric leaves the system prompt open; it never grants access.
-                });
+                authenticatePrepared(activity, callback, enrolling, alias, previousAlias, cipher, encrypted,
+                        Api28::showPrompt);
             } catch (Exception invalidated) {
-                if (enrolling) deleteKey(alias);
-                if (completed.compareAndSet(false, true))
-                    callback.failure("Biometria indisponível ou alterada. Entre com a senha e ative-a novamente.");
+                if (enrolling) deleteKey(alias); else invalidateGrant(activity, alias);
+                callback.failure("Biometria indisponível ou alterada. Entre com a senha para ativá-la novamente.");
             }
+        }
+
+        static void showPrompt(Activity activity, boolean enrolling, Cipher cipher,
+                               CancellationSignal cancellation, AuthenticationEvents events) {
+            BiometricPrompt.Builder builder = new BiometricPrompt.Builder(activity)
+                    .setTitle(enrolling ? "Ativar entrada por biometria" : "Entrar no MyFinanceHub")
+                    .setSubtitle("Confirme uma biometria cadastrada neste aparelho")
+                    .setNegativeButton("Usar senha", activity.getMainExecutor(), (dialog, which) -> cancellation.cancel());
+            if (Build.VERSION.SDK_INT >= 30)
+                builder.setAllowedAuthenticators(BiometricManager.Authenticators.BIOMETRIC_STRONG);
+            builder.build().authenticate(new BiometricPrompt.CryptoObject(cipher), cancellation,
+                    activity.getMainExecutor(), new BiometricPrompt.AuthenticationCallback() {
+                @Override public void onAuthenticationSucceeded(BiometricPrompt.AuthenticationResult result) {
+                    events.success(result.getCryptoObject() == null ? null : result.getCryptoObject().getCipher());
+                }
+                @Override public void onAuthenticationError(int errorCode, CharSequence errorMessage) {
+                    events.error(errorCode);
+                }
+                // Nonmatching attempts leave the system prompt open and never grant access.
+            });
         }
     }
 }

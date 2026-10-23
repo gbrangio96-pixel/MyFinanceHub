@@ -27,6 +27,7 @@ public class PluggyPersonalClientTest {
     private static final LocalDate FROM = LocalDate.of(2026, 10, 20), TO = LocalDate.of(2026, 10, 22);
     private static final Clock CLOCK = Clock.fixed(Instant.parse("2026-10-22T12:00:00Z"), ZoneOffset.UTC);
     private static final String CLIENT_ID = "fixture-client", CLIENT_SECRET = "private-fixture-secret", KEY = "fixture-api-key";
+    private static final String CONNECT_TOKEN = "fixture-connect-token.temporary.signature";
     private interface Route { PluggyPersonalClient.Response get(String method, URI uri, Map<String, String> headers, String body) throws Exception; }
     private static final class Fake implements PluggyPersonalClient.Transport {
         JSONObject account = account(), transaction = transaction();
@@ -73,6 +74,101 @@ public class PluggyPersonalClientTest {
     private static void invalid(Fake fake) throws Exception {
         try {fake.fetch(); fail("Invalid/incomplete provider data was accepted");}
         catch (PluggyPersonalClient.Failure expected) {assertFalse(expected.getMessage().contains(CLIENT_SECRET)); assertFalse(expected.getMessage().contains(KEY));}
+    }
+    private static String connectToken(Fake fake) throws IOException {
+        return new PluggyPersonalClient(fake, CLOCK).createConnectToken(CLIENT_ID, CLIENT_SECRET);
+    }
+    private static void invalidConnectToken(Fake fake) throws Exception {
+        try { connectToken(fake); fail("Invalid Connect response was accepted"); }
+        catch (PluggyPersonalClient.Failure expected) {
+            assertFalse(expected.getMessage().contains(CLIENT_SECRET));
+            assertFalse(expected.getMessage().contains(KEY));
+            assertFalse(expected.getMessage().contains(CONNECT_TOKEN));
+            assertNull("Transport/provider errors must not retain sensitive causes", expected.getCause());
+        }
+    }
+
+    @Test public void connectTokenAuthenticatesThenPostsAnEmptyBodyWithoutItemIdsOrFinancialRequests() throws Exception {
+        Fake fake = new Fake();
+        fake.route = (method, uri, headers, body) -> {
+            if (!uri.getPath().equals("/connect_token")) return null;
+            assertEquals("POST", method); assertNull(uri.getRawQuery());
+            assertEquals("application/json", headers.get("Accept"));
+            assertEquals("application/json", headers.get("Content-Type"));
+            assertEquals(KEY, headers.get("X-API-KEY"));
+            assertEquals("No item IDs, user IDs or bank credentials are sent", 0, new JSONObject(body).length());
+            assertFalse(body.contains(CLIENT_ID)); assertFalse(body.contains(CLIENT_SECRET));
+            return json(new JSONObject().put("accessToken", CONNECT_TOKEN));
+        };
+        assertEquals(CONNECT_TOKEN, connectToken(fake));
+        assertEquals(2, fake.urls.size());
+        assertEquals(PluggyPersonalClient.API_ORIGIN + "/auth", fake.urls.get(0).toString());
+        assertEquals(PluggyPersonalClient.API_ORIGIN + "/connect_token", fake.urls.get(1).toString());
+        assertEquals(0, fake.pages);
+    }
+    @Test public void connectTokenValidatesOnlyProjectCredentialsBeforeNetwork() throws Exception {
+        PluggyPersonalClient.validateCredentials(CLIENT_ID, CLIENT_SECRET);
+        for (String id : new String[]{null, "", " id", "id\n", "x".repeat(257)}) {
+            Fake fake = new Fake();
+            try { new PluggyPersonalClient(fake, CLOCK).createConnectToken(id, CLIENT_SECRET); fail(); }
+            catch (IllegalArgumentException expected) { assertTrue(fake.urls.isEmpty()); assertFalse(expected.getMessage().contains(CLIENT_SECRET)); }
+        }
+        for (String secret : new String[]{null, "", " secret", "secret\n", "x".repeat(4097)}) {
+            Fake fake = new Fake();
+            try { new PluggyPersonalClient(fake, CLOCK).createConnectToken(CLIENT_ID, secret); fail(); }
+            catch (IllegalArgumentException expected) { assertTrue(fake.urls.isEmpty()); assertFalse(expected.getMessage().contains("itemId")); }
+        }
+    }
+    @Test public void connectTokenRejectsMissingMalformedAndWhitespaceTokensWithoutFallbackRequests() throws Exception {
+        for (Object token : new Object[]{JSONObject.NULL, 42, true, new JSONObject(), new JSONArray(), "", " ",
+                " token", "token ", "token\nvalue", "token\tvalue", "token\u007fvalue", "token\u0085value",
+                "token\u00a0value", "token\u2003value", "x".repeat(8193)}) {
+            Fake fake = new Fake();
+            fake.route = (method, uri, headers, body) -> uri.getPath().equals("/connect_token")
+                    ? json(new JSONObject().put("accessToken", token)) : null;
+            invalidConnectToken(fake); assertEquals(2, fake.urls.size());
+        }
+        Fake missing = new Fake(); missing.route = (m, u, h, b) -> u.getPath().equals("/connect_token") ? json(new JSONObject()) : null;
+        invalidConnectToken(missing); assertEquals(2, missing.urls.size());
+    }
+    @Test public void connectTokenRejectsMalformedAuthenticationBeforeCreatingAConnectSession() throws Exception {
+        for (Object apiKey : new Object[]{JSONObject.NULL, 23, "", "key value", "key\nvalue", "key\u00a0value", "x".repeat(8193)}) {
+            Fake fake = new Fake(); fake.route = (m, u, h, b) -> json(new JSONObject().put("apiKey", apiKey));
+            invalidConnectToken(fake); assertEquals(1, fake.urls.size());
+        }
+    }
+    @Test public void connectTokenRedactsProviderAndTransportErrorsAndNeverFollowsAnotherEndpoint() throws Exception {
+        for (String endpoint : new String[]{"/auth", "/connect_token"}) {
+            for (int status : new int[]{301, 302, 307, 401, 403, 429, 500, 503}) {
+                Fake fake = new Fake(); fake.route = (m, u, h, b) -> u.getPath().equals(endpoint)
+                        ? new PluggyPersonalClient.Response(status, CLIENT_SECRET + KEY + CONNECT_TOKEN) : null;
+                invalidConnectToken(fake); assertEquals(endpoint.equals("/auth") ? 1 : 2, fake.urls.size());
+            }
+            Fake failed = new Fake(); failed.route = (m, u, h, b) -> {
+                if (u.getPath().equals(endpoint)) throw new IOException(CLIENT_SECRET + KEY + CONNECT_TOKEN);
+                return null;
+            };
+            invalidConnectToken(failed); assertEquals(endpoint.equals("/auth") ? 1 : 2, failed.urls.size());
+        }
+    }
+    @Test public void connectTokenRetainsJsonByteAndCancellationLimits() throws Exception {
+        for (PluggyPersonalClient.Response response : new PluggyPersonalClient.Response[]{
+                new PluggyPersonalClient.Response(200, "{\"accessToken\":\"" + CONNECT_TOKEN + "\"}", "text/html"),
+                new PluggyPersonalClient.Response(200, "{\"accessToken\":\"" + CONNECT_TOKEN + "\"} trailing"),
+                new PluggyPersonalClient.Response(200, "x".repeat(PluggyPersonalClient.MAX_RESPONSE_BYTES + 1)),
+                new PluggyPersonalClient.Response(200, null), null}) {
+            Fake fake = new Fake();
+            PluggyPersonalClient.Response auth = json(new JSONObject().put("apiKey", KEY));
+            // A separate transport allows a null reply without falling through the fixture router.
+            PluggyPersonalClient client = new PluggyPersonalClient((method, uri, headers, body) -> {
+                fake.urls.add(uri); return uri.getPath().equals("/auth") ? auth : response;
+            }, CLOCK);
+            try { client.createConnectToken(CLIENT_ID, CLIENT_SECRET); fail(); }
+            catch (PluggyPersonalClient.Failure expected) { assertEquals(2, fake.urls.size()); assertFalse(expected.getMessage().contains(CONNECT_TOKEN)); }
+        }
+        Fake cancelled = new Fake();
+        try { Thread.currentThread().interrupt(); invalidConnectToken(cancelled); assertTrue(cancelled.urls.isEmpty()); }
+        finally { Thread.interrupted(); }
     }
 
     @Test public void readsOnlyFixedProviderAndPreservesExactMoneySourceIdentityAndLiteralDate() throws Exception {

@@ -41,6 +41,7 @@ public final class PluggyActivity extends LockedActivity {
     private Button fetch,configure,connectionDetails;
     private Spinner accountFilter,statusFilter;
     private PluggyClient.Snapshot snapshot;
+    private String snapshotRevision="";
     private final List<PluggyClient.Transaction> filteredRows=new ArrayList<>();
     @Override public void onCreate(Bundle state){
         setTheme(AppAppearance.themeRes(this));super.onCreate(state);colors=AppAppearance.palette(this);store=new FinanceStore(this);settings=new PersonalPluggySettings(this);
@@ -73,7 +74,7 @@ public final class PluggyActivity extends LockedActivity {
         android.widget.AdapterView.OnItemSelectedListener listener=new android.widget.AdapterView.OnItemSelectedListener(){public void onNothingSelected(android.widget.AdapterView<?> parent){}public void onItemSelected(android.widget.AdapterView<?> parent,View view,int position,long id){if(!updatingFilters)renderRows();}};
         accountFilter.setOnItemSelectedListener(listener);statusFilter.setOnItemSelectedListener(listener);
         search.addTextChangedListener(new android.text.TextWatcher(){public void beforeTextChanged(CharSequence s,int start,int count,int after){}public void afterTextChanged(android.text.Editable text){}public void onTextChanged(CharSequence s,int start,int before,int count){renderRows();}});
-        list.setOnItemClickListener((parent,view,position,id)->{int index=position-list.getHeaderViewsCount();if(index>=0&&index<filteredRows.size())review(filteredRows.get(index));});renderRows();
+        list.setOnItemClickListener((parent,view,position,id)->{int index=position-list.getHeaderViewsCount();if(index>=0&&index<filteredRows.size())review(filteredRows.get(index));});renderRows();syncSharedSnapshot();
     }
     private void datePicker(EditText input){input.setFocusable(false);input.setOnClickListener(v->{LocalDate day=LocalDate.parse(input.getText().toString());new DatePickerDialog(this,(picker,year,month,date)->input.setText(LocalDate.of(year,month+1,date).toString()),day.getYear(),day.getMonthValue()-1,day.getDayOfMonth()).show();});}
     void showConnectionSettings(){
@@ -185,13 +186,25 @@ public final class PluggyActivity extends LockedActivity {
     protected void query(){
         if(busy||!canConfirm())return;
         try{
+            String requestedRevision=settings.revision();long sessionGeneration=AuthSession.generation();
             PersonalPluggySettings.Credentials credentials=settings.load();LocalDate start=PluggyClient.day(from.getText().toString()),end=PluggyClient.day(to.getText().toString());
+            if(!requestedRevision.equals(settings.revision())){syncSharedSnapshot();return;}
+            if(!requestedRevision.equals(snapshotRevision)){snapshot=null;snapshotRevision=requestedRevision;renderAccounts();resetAccountFilter();renderRows();}
             setBusy(true);status.setText(R.string.pluggy_consulting);int request=++generation;
-            task=worker.submit(()->{try{PluggyClient.Snapshot result=client.fetch(credentials.clientId,credentials.clientSecret,credentials.itemIds,start,end);runOnUiThread(()->{if(destroyed||generation!=request||!canConfirm())return;setBusy(false);showSnapshot(result);});}
-                catch(Exception ex){runOnUiThread(()->{if(destroyed||generation!=request||!canConfirm())return;setBusy(false);String message=ex instanceof java.io.IOException?ex.getMessage():getString(R.string.pluggy_query_invalid);status.setText(snapshot==null?message:getString(R.string.pluggy_previous_native,message,formatTime(snapshot.observedAt)));});}});
+            task=worker.submit(()->{try{PluggyClient.Snapshot result=client.fetch(credentials.clientId,credentials.clientSecret,credentials.itemIds,start,end);runOnUiThread(()->{
+                if(destroyed||generation!=request||!canConfirm()||sessionGeneration!=AuthSession.generation())return;
+                setBusy(false);if(!PluggySnapshotCache.publish(this,requestedRevision,result)){syncSharedSnapshot();return;}showSnapshot(result);
+            });}
+                catch(Exception ex){runOnUiThread(()->{if(destroyed||generation!=request||!canConfirm()||sessionGeneration!=AuthSession.generation())return;setBusy(false);if(!requestedRevision.equals(settings.revision())){syncSharedSnapshot();return;}String message=ex instanceof java.io.IOException?ex.getMessage():getString(R.string.pluggy_query_invalid);status.setText(snapshot==null?message:getString(R.string.pluggy_previous_native,message,formatTime(snapshot.observedAt)));});}});
         }catch(Exception ex){error(ex.getMessage());}
     }
-    void showSnapshot(PluggyClient.Snapshot value){snapshot=value;status.setText(getString(R.string.pluggy_observed_native,formatTime(value.observedAt)));renderAccounts();resetAccountFilter();renderRows();}
+    void showSnapshot(PluggyClient.Snapshot value){snapshot=value;snapshotRevision=settings.revision();status.setText(getString(R.string.pluggy_observed_native,formatTime(value.observedAt)));renderAccounts();resetAccountFilter();renderRows();}
+    private void syncSharedSnapshot(){
+        String current=settings.revision();
+        if(!current.equals(snapshotRevision)){snapshot=null;snapshotRevision=current;renderAccounts();resetAccountFilter();renderRows();status.setText(settings.configured()?R.string.pluggy_ready_native:R.string.pluggy_connect_native);}
+        PluggyClient.Snapshot shared=PluggySnapshotCache.get(this);
+        if(shared!=null&&shared!=snapshot){from.setText(shared.from);to.setText(shared.to);showSnapshot(shared);}
+    }
     private void renderAccounts(){accountCards.removeAllViews();connectionDetails.setEnabled(snapshot!=null);
         if(snapshot==null)return;
         for(PluggyClient.Account account:snapshot.accounts){LinearLayout card=column();card.setPadding(dp(16),dp(14),dp(16),dp(14));GradientDrawable bg=new GradientDrawable();bg.setColor(colors.surface);bg.setCornerRadius(dp(16));card.setBackground(bg);card.setContentDescription("Conta API "+account.name);
@@ -247,7 +260,7 @@ public final class PluggyActivity extends LockedActivity {
     }
     private void setBusy(boolean value){busy=value;fetch.setEnabled(!value);configure.setEnabled(!value);from.setEnabled(!value);to.setEnabled(!value);}
     private void cancel(){generation++;if(task!=null)task.cancel(true);if(busy){setBusy(false);status.setText(generatingConnectToken?R.string.pluggy_token_interrupted:R.string.pluggy_interrupted);}generatingConnectToken=false;}
-    @Override protected void onResume(){super.onResume();if(AuthSession.isUnlocked()&&!entryConsulted&&settings.configured()){entryConsulted=true;query();}}
+    @Override protected void onResume(){super.onResume();if(!canConfirm())return;syncSharedSnapshot();if(settings.configured()&&!busy&&(!entryConsulted||!PluggySnapshotCache.isRecent(this,30_000))){entryConsulted=true;if(!PluggySnapshotCache.isRecent(this,30_000))query();}}
     @Override protected void onPause(){dismissConnectToken();cancel();super.onPause();}
     @Override protected void onStop(){dismissConnectToken();super.onStop();}
     @Override protected void onDestroy(){destroyed=true;dismissConnectToken();unregisterReceiver(screenOff);cancel();worker.shutdownNow();store.close();super.onDestroy();}

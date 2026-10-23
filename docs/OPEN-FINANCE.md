@@ -1,6 +1,6 @@
-# Meu Pluggy pessoal no Android 0.6.3
+# Meu Pluggy pessoal no Android 0.6.4
 
-A consulta Android agora usa diretamente a API pessoal Pluggy, sem contratar hospedagem. O backend de leitura em `backend/` permanece disponível como alternativa técnica, mas não é necessário para a conexão pessoal no app. Não foi criada conta paga nem publicada infraestrutura.
+O Painel do Android usa exclusivamente dados consultados da API pessoal Pluggy, separados por conta, sem contratar hospedagem. As movimentações locais de teste ficam fora dessa visão e a atualização por notificações está encerrada. O backend de leitura em `backend/` permanece disponível como alternativa técnica, mas não é necessário para a conexão pessoal no app. Não foi criada conta paga nem publicada infraestrutura.
 
 ## Por que só o login Meu Pluggy não basta
 
@@ -18,7 +18,7 @@ Para o fluxo em que o usuário apenas escolhe e autoriza bancos, é preciso conf
 6. Em **Demo → Connected Items**, abra cada item espelhado e copie o **itemId**. São de um a cinco IDs próprios, sem repetições.
 7. No MyFinanceHub, abra **Painel → Contas conectadas → Configurar conexão**. Preencha Client ID, Client Secret e os itemId somente no aparelho e toque **Salvar e consultar**. Os três campos vazios mantêm a configuração existente; ao alterar, preencha os três juntos.
 
-**Onde encontrar os dados da conexão**, na tela nativa e na configuração, oferece o passo a passo e links oficiais. Abrir os links é uma ação explícita; consultar contas e transações não abre o navegador. Depois da configuração inicial, a opção **Consultar ao entrar no aplicativo** usa automaticamente as credenciais protegidas no aparelho.
+**Onde encontrar os dados da conexão**, na tela nativa e na configuração, oferece o passo a passo e links oficiais. Abrir os links é uma ação explícita; consultar contas e transações não abre o navegador. Depois da configuração inicial, a opção **Consultar ao entrar no aplicativo** permite que o painel consulte a API em primeiro plano com as credenciais protegidas no aparelho.
 
 Não envie credenciais, CPF, senhas ou extratos no chat. A autenticação local MyFinanceHub é separada da conta Meu Pluggy. O aplicativo consulta as contas pela API; você não digita seus saldos ou movimentações para fazer essa leitura. Para salvar uma despesa local, a classificação, revisão e confirmação continuam obrigatórias.
 
@@ -32,15 +32,23 @@ O resultado é exibido somente em um diálogo nativo, com cópia marcada como co
 
 Não foi emitido token real nesta validação: não há Client ID/Secret reais configurados no ambiente de desenvolvimento. O token será solicitado à Pluggy no próprio celular após você informar suas chaves, sem enviá-las ao chat.
 
-## Consulta e revisão
+## Painel por conta e consulta detalhada
 
-A tela principal é nativa: contas, cartões, saldos informados, horários e movimentações aparecem dentro do app, sem abrir navegador ou WebView. A configuração e o guia ficam em diálogos separados. Atualizar dados consulta diretamente a API; filtros por conta/situação e busca não alteram os dados financeiros. A opção Consultar ao entrar faz a leitura em primeiro plano após o login local. Pode ser desativada na tela de conexão. O período padrão é de 30 dias, e o máximo é 90 dias inclusivos, sem data final futura. A consulta é somente leitura: não executa Pix, pagamentos, cadastro de contas bancárias nem sincronização forçada. O Meu Pluggy normalmente atualiza os bancos a cada 24 horas; horários/status da origem ficam visíveis.
+O login abre **Contas do Pluggy**. Cada conta bancária ou cartão tem seu próprio bloco: saldo informado pelo provedor, contagem de movimentações e pendências no período e até três movimentos recentes. **Conta do painel** filtra todas as contas ou uma específica. A associação de cada movimento usa sua conta e conexão de origem; identificadores de conta iguais em conexões diferentes não misturam os dados. Contas bancárias e cartões não compõem um saldo agregado único.
 
-Contas e compras no crédito ficam identificadas separadamente. O saldo informado é referência do provedor, não uma entrada e não um saldo inicial aplicado automaticamente. Nenhum lançamento local é criado ao consultar.
+**Atualizar painel** faz uma leitura para os últimos 30 dias. **Contas conectadas** abre a consulta detalhada, com período de até 90 dias inclusivos, busca e filtros por conta/situação. O período efetivo e o horário da resposta exibida ficam visíveis. Todas as contas e movimentações aparecem em componentes nativos, sem navegador ou WebView; configuração e guia ficam separados.
 
-Transações PENDING permanecem pendentes, sem botão de gravação. POSTED pode ser revisada: escolha conta local, cartão se for crédito, categoria e forma de pagamento. Classifique pagamentos de fatura e transferências próprias para preservar os relatórios. O resumo exige Confirmar e salvar. Cancelar mantém os dados locais intactos.
+Com **Consultar ao entrar no aplicativo** ativado, o painel consulta em primeiro plano quando necessário. As duas telas compartilham em memória a última resposta completa e podem reutilizar uma consulta recebida há menos de 30 segundos ao navegar. Não há atualização bancária agendada a cada 30 segundos nem leitura com o app fechado. Fechar o processo elimina essa cópia. Ela é vinculada à configuração atual; trocar credenciais ou desconectar a invalida e uma resposta atrasada da configuração anterior é recusada. Falhas de atualização preservam a última consulta identificada com seu período e horário. Sem consulta disponível, o painel informa a ausência dos dados, sem inventar saldo zero ou aproveitar valores locais.
 
-A identidade SHA-256 da origem é guardada com o lançamento em transação SQLite. A repetição da mesma origem é impedida globalmente, inclusive depois de vincular outra conta local e depois de restaurar backup. Valores iguais de CSV, notificações ou conexões recriadas podem representar o mesmo movimento; há aviso de possível duplicidade, mas não há eliminação automática baseada somente em data/valor.
+As movimentações previamente inseridas para testes ficam fora dos valores e listas do painel. Registros antigos, relatórios locais, investimentos cadastrados e posição B3 permanecem preservados nas telas próprias e no backup financeiro. Consultar o Pluggy não grava lançamentos nem modifica saldos locais: o saldo exibido no painel é a referência informada pelo provedor, não uma entrada ou saldo inicial aplicado automaticamente.
+
+A captura de notificações foi encerrada. Configurações antigas de acesso não a reativam e o app não solicita nova permissão. **Ajustes → Histórico de notificações** oferece apenas consulta das sugestões antigas, sem atualização de saldos ou promoção a lançamentos.
+
+O Meu Pluggy normalmente atualiza os bancos a cada 24 horas; consultar a API não força atualização na instituição. Esta integração não executa Pix, pagamentos ou cadastro de contas bancárias.
+
+Transações PENDING permanecem pendentes, sem botão de gravação. POSTED pode ser revisada em **Contas conectadas**: escolha conta local, cartão se for crédito, categoria e forma de pagamento. Classifique pagamentos de fatura e transferências próprias para preservar os relatórios. O resumo exige **Confirmar e salvar**. Cancelar mantém os dados locais intactos.
+
+A identidade SHA-256 da origem é guardada com o lançamento em transação SQLite. A repetição da mesma origem é impedida globalmente, inclusive depois de vincular outra conta local e depois de restaurar backup. Valores iguais de CSV, registros históricos de notificações ou conexões recriadas podem representar o mesmo movimento; há aviso de possível duplicidade, sem eliminação automática baseada somente em data/valor.
 
 ## Credenciais e limites
 
@@ -48,7 +56,7 @@ Client ID, Client Secret e IDs pessoais são criptografados em armazenamento pri
 
 O cliente aplica os mesmos limites defensivos do backend: até 5 itens, 100 linhas de contas, 5.000 linhas de transações, 20 páginas por conta e 40 requisições; 2 MiB por resposta e 8 MiB somados, com prazos limitados. Falha de qualquer página invalida a consulta inteira. Valores usam centavos exatos, sem arredondamento de dados inválidos; moedas diferentes de BRL são recusadas. A data literal informada não é deslocada para o dia anterior por fuso.
 
-Desconectar apaga as credenciais locais e limpa a consulta da tela, preservando lançamentos confirmados. Para revogar a chave ou o consentimento bancário, use Dashboard/Meu Pluggy. As credenciais pessoais podem precisar ser informadas novamente após mudança da chave protegida ou de aparelho.
+Desconectar apaga as credenciais locais e invalida a consulta compartilhada entre o painel e a tela detalhada, preservando lançamentos confirmados. Para revogar a chave ou o consentimento bancário, use Dashboard/Meu Pluggy. As credenciais pessoais podem precisar ser informadas novamente após mudança da chave protegida ou de aparelho.
 
 As condições de uso pessoal, gratuidade, limites e cobertura pertencem ao provedor. Não há garantia de atualização em tempo real. Nenhum plano é contratado automaticamente. Conectar só a conta no portal, sem autorizar bancos/espelhar itens e configurar a aplicação pessoal, não basta para consultar.
 

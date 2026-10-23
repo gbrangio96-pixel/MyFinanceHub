@@ -59,6 +59,8 @@ public final class B3ActivityTest {
         context = RuntimeEnvironment.getApplication();
         context.getSharedPreferences("appearance", Context.MODE_PRIVATE).edit().clear().commit();
         context.getSharedPreferences("MainActivity", Context.MODE_PRIVATE).edit().clear().commit();
+        context.getSharedPreferences("personal_pluggy_private", Context.MODE_PRIVATE).edit().clear().commit();
+        PluggySnapshotCache.clear(context);
         context.deleteDatabase("myfinancehub.db");
         context.deleteDatabase("myfinancehub-notifications.db");
         controller = Robolectric.buildActivity(MainActivity.class).setup();
@@ -82,9 +84,11 @@ public final class B3ActivityTest {
         context.deleteDatabase("myfinancehub-notifications.db");
         context.getSharedPreferences("appearance", Context.MODE_PRIVATE).edit().clear().commit();
         context.getSharedPreferences("MainActivity", Context.MODE_PRIVATE).edit().clear().commit();
+        context.getSharedPreferences("personal_pluggy_private", Context.MODE_PRIVATE).edit().clear().commit();
+        PluggySnapshotCache.clear(context);
     }
 
-    @Test public void reportIsAccessibleFromWalletAndDashboardWithoutInventedHoldings() {
+    @Test public void reportRemainsAccessibleFromWalletAndSettingsOutsideThePluggyPanel() {
         openB3();
         assertVisible("Posição B3");
         assertVisible("Importar posição B3");
@@ -94,6 +98,12 @@ public final class B3ActivityTest {
         assertEquals(0, store.totalBalance());
 
         tab("Painel");
+        assertVisible("Contas do Pluggy");
+        assertNull("A local B3 report must not become Pluggy dashboard data", byDescription(screen(), "Posição B3"));
+        assertNull(byText(screen(), "Importar posição B3"));
+        assertNull(store.b3Snapshot());
+
+        tab("Ajustes");
         clickClickable(byDescription(screen(), "Posição B3"));
         assertVisible("Posição B3");
         assertVisible("Importar posição B3");
@@ -150,9 +160,20 @@ public final class B3ActivityTest {
         assertVisible("Posição B3");
         assertContains(screen(), "Ação fictícia");
         assertManualMoney();
+        String preserved = store.exportBackup();
         tab("Painel");
+        assertVisible("Contas do Pluggy");
+        assertNotContains(screen(), "R$ 987,65");
+        assertNotContains(screen(), "R$ 4.321,00");
+        assertNotContains(screen(), "R$ 1.234,56");
+        assertNull(byDescription(screen(), "Posição B3"));
+        assertEquals("Ignoring local holdings in the panel must not change stored data", preserved, store.exportBackup());
+
+        tab("Carteira");
         assertContains(screen(), "R$ 987,65");
         assertContains(screen(), "R$ 4.321,00");
+        assertNotNull(byDescription(screen(), "Abrir posição B3"));
+        assertEquals(preserved, store.exportBackup());
         assertManualMoney();
     }
 

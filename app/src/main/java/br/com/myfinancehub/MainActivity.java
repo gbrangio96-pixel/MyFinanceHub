@@ -44,6 +44,13 @@ public final class MainActivity extends LockedActivity {
     private static final String[] INVESTMENT_LIQUIDITY_NAMES={"Não informada","Diária","Até 30 dias","Acima de 30 dias","No vencimento"};
     private FinanceStore store;
     private NotificationInbox notificationInbox;
+    PersonalPluggySettings pluggySettings;
+    PluggyPersonalClient pluggyClient=new PluggyPersonalClient();
+    private boolean pluggyPanelResumed,pluggyPanelLoading;
+    private Future<?> pluggyPanelTask;
+    private int pluggyPanelGeneration;
+    private long pluggyPanelLastAttempt=-1;
+    private String pluggyPanelMessage="",pluggySelectedAccount="";
     private LinearLayout root, content, navigation;
     private ScrollView screenScroll;
     private int renderedPage=-1;
@@ -88,8 +95,9 @@ public final class MainActivity extends LockedActivity {
         MUTED=colors.muted;LINE=colors.line;RED=colors.expense;WHITE=colors.surface;
         store=new FinanceStore(this);
         notificationInbox=new NotificationInbox(this);
+        pluggySettings=new PersonalPluggySettings(this);
         hidden=getPreferences(0).getBoolean("hidden",false);
-        if(state!=null){ page=state.getInt("page"); filter=state.getInt("filter");
+        if(state!=null){ pluggySelectedAccount=state.getString("pluggy_account","");page=state.getInt("page"); filter=state.getInt("filter");
             month=YearMonth.parse(state.getString("month",month.toString())); search=state.getString("search","");categorySearch=state.getString("categorySearch","");
             int[] savedScroll=state.getIntArray("page_scroll");if(savedScroll!=null)System.arraycopy(savedScroll,0,pageScroll,0,Math.min(savedScroll.length,pageScroll.length));
             visibleEntries=state.getInt("visible_entries",PAGE_SIZE);b3Search=state.getString("b3_search","");visibleB3Positions=state.getInt("b3_visible",PAGE_SIZE);}
@@ -100,7 +108,7 @@ public final class MainActivity extends LockedActivity {
         render();
     }
     @Override protected void onSaveInstanceState(Bundle state){
-        super.onSaveInstanceState(state); state.putInt("page",page); state.putInt("filter",filter);
+        super.onSaveInstanceState(state); state.putString("pluggy_account",pluggySelectedAccount);state.putInt("page",page); state.putInt("filter",filter);
         state.putString("month",month.toString()); state.putString("search",search);
         state.putString("categorySearch",categorySearch);
         rememberScroll();state.putIntArray("page_scroll",pageScroll);state.putInt("visible_entries",visibleEntries);
@@ -108,9 +116,9 @@ public final class MainActivity extends LockedActivity {
         state.putString("report_from",reportFrom.toString());state.putString("report_to",reportTo.toString());state.putInt("report_preset",reportPreset);state.putLong("report_account",reportAccountId);state.putBoolean("report_all_categories",allReportCategories);
     }
     @Override public Object onRetainNonConfigurationInstance(){return pendingReport;}
-    @Override protected void onResume(){super.onResume();if(AppAppearance.isDark(this)!=darkTheme){recreate();return;}if(firstResume)firstResume=false;else if(store!=null)render();quoteHandler.removeCallbacks(quoteTick);quoteHandler.post(quoteTick);}
-    @Override protected void onPause(){quoteHandler.removeCallbacksAndMessages(null);quoteGeneration++;if(automaticQuoteTask!=null)automaticQuoteTask.cancel(true);quoteRefreshRunning=false;super.onPause();}
-    @Override protected void onDestroy(){quoteHandler.removeCallbacksAndMessages(null);if(activeProgress!=null)activeProgress.dismiss();worker.execute(()->{store.close();notificationInbox.close();});worker.shutdown();super.onDestroy();}
+    @Override protected void onResume(){super.onResume();pluggyPanelResumed=true;if(AppAppearance.isDark(this)!=darkTheme){recreate();return;}if(firstResume)firstResume=false;else if(store!=null)render();quoteHandler.removeCallbacks(quoteTick);quoteHandler.post(quoteTick);maybeRefreshPluggyPanel();}
+    @Override protected void onPause(){pluggyPanelResumed=false;cancelPluggyPanel();quoteHandler.removeCallbacksAndMessages(null);quoteGeneration++;if(automaticQuoteTask!=null)automaticQuoteTask.cancel(true);quoteRefreshRunning=false;super.onPause();}
+    @Override protected void onDestroy(){cancelPluggyPanel();quoteHandler.removeCallbacksAndMessages(null);if(activeProgress!=null)activeProgress.dismiss();worker.execute(()->{store.close();notificationInbox.close();});worker.shutdown();super.onDestroy();}
 
     private void maybeAutomaticQuotes(){
         if(!AuthSession.isUnlocked()||isFinishing()||isDestroyed()||quoteRefreshRunning||activeProgress!=null||!(page==0||page==2||page==6)||!InvestmentQuoteUpdater.isAutomaticRefreshDue(this))return;
@@ -150,6 +158,7 @@ public final class MainActivity extends LockedActivity {
             item.setMinimumHeight(dp(68));navigation.addView(item,new LinearLayout.LayoutParams(0,-2,1));}
         root.addView(navigation);
         if(page==0||page==2||page==6)quoteHandler.post(this::maybeAutomaticQuotes);
+        if(page==0&&pluggyPanelResumed)quoteHandler.post(this::maybeRefreshPluggyPanel);
         final int restoreY=pageScroll[page];
         scroll.getViewTreeObserver().addOnGlobalLayoutListener(new android.view.ViewTreeObserver.OnGlobalLayoutListener(){public void onGlobalLayout(){scroll.getViewTreeObserver().removeOnGlobalLayoutListener(this);if(screenScroll==scroll)scroll.scrollTo(0,restoreY);}});
     }
@@ -161,42 +170,100 @@ public final class MainActivity extends LockedActivity {
     }
 
     private void dashboard(){
-        eyebrow("VISÃO GERAL");title("Seu dinheiro");
-        add(text("Saldos e investimentos em um só lugar.",14,MUTED,false),0,6,0,20);
-        LinearLayout balance=box(colors.hero);balance.setPadding(dp(22),dp(22),dp(22),dp(22));
-        balance.addView(text("SALDO NAS CONTAS",12,colors.heroMuted,true));
-        addTo(balance,text(money(store.totalBalance()),34,colors.heroText,true),0,10,0,8);
-        balance.addView(text("Disponível nas contas, sem somar os investimentos.",12,colors.heroMuted,false));
-        add(balance,0,0,0,4);
-
-        section("Investimentos","Carteira cadastrada no app");
-        List<Models.Investment> positions=store.investments();long invested=0,current=0;
-        for(Models.Investment investment:positions){invested=Math.addExact(invested,investment.investedCents);current=Math.addExact(current,investment.currentCents);}
-        long variation=Math.subtractExact(current,invested);
-        LinearLayout investments=box(WHITE);
-        investments.addView(text("VALOR ATUAL",12,MUTED,true));
-        addTo(investments,text(money(current),30,TEXT,true),0,9,0,18);
-        LinearLayout totals=row();
-        LinearLayout applied=column();applied.addView(text("Total aplicado",12,MUTED,false));addTo(applied,text(money(invested),16,TEXT,true),0,5,0,0);
-        LinearLayout change=column();change.addView(text("Rentabilidade simples",12,MUTED,false));addTo(change,text((!hidden&&variation>0?"+ ":"")+money(variation),16,variation<0?RED:colors.income,true),0,5,0,0);addTo(change,text(returnPercent(invested,current),13,MUTED,false),0,5,0,0);
-        totals.addView(applied,new LinearLayout.LayoutParams(0,-2,1));totals.addView(change,new LinearLayout.LayoutParams(0,-2,1));investments.addView(totals);
-        if(positions.isEmpty())addTo(investments,text("Cadastre seus investimentos em Carteira para acompanhar as posições aqui.",13,MUTED,false),0,18,0,0);
-        else{
-            addTo(investments,text(positions.size()+" "+(positions.size()==1?"investimento cadastrado":"investimentos cadastrados"),12,MUTED,false),0,18,0,10);
-            for(int i=0;i<Math.min(3,positions.size());i++){
-                Models.Investment investment=positions.get(i);divider(investments);LinearLayout item=row();item.setPadding(0,dp(14),0,dp(14));
-                TextView name=text(investment.name+(investment.ticker.isEmpty()?"":" · "+investment.ticker),14,TEXT,true);name.setMaxLines(2);
-                item.addView(name,new LinearLayout.LayoutParams(0,-2,1));TextView value=text(money(investment.currentCents),14,TEXT,true);value.setPadding(dp(12),0,0,0);item.addView(value);
-                item.setContentDescription("Editar investimento "+investment.name+", "+money(investment.currentCents));item.setBackground(feedback(WHITE,10));item.setOnClickListener(v->editInvestment(investment));investments.addView(item);
-            }
+        eyebrow("DADOS DO MEU PLUGGY");title("Contas do Pluggy");
+        add(text("Saldos e movimentações separados por conta, conforme informados pelo provedor.",14,MUTED,false),0,6,0,14);
+        Button refresh=button(pluggyPanelLoading?"Consultando Pluggy…":"Atualizar painel",GREEN,colors.onPrimary);
+        refresh.setContentDescription("Atualizar painel");refresh.setEnabled(!pluggyPanelLoading);refresh.setOnClickListener(v->refreshPluggyPanel());add(refresh,0,0,0,12);
+        action("Contas conectadas","Configurar o Meu Pluggy, consultar o período e revisar transações.",()->startActivity(new Intent(this,PluggyActivity.class)));
+        if(!AuthSession.isUnlocked())return;
+        PluggyClient.Snapshot snapshot=PluggySnapshotCache.get(this);
+        if(!pluggySettings.configured()){
+            pluggyPanelMessage="";
+            add(text("Configure o Meu Pluggy para consultar suas contas.",15,TEXT,true),0,12,0,8);
+            add(text("Nenhum saldo ou movimento local anterior é usado neste painel.",13,MUTED,false),0,0,0,12);
+            return;
         }
-        add(investments,0,0,0,14);
-        Button wallet=button("Ver carteira",GREEN,colors.onPrimary);wallet.setOnClickListener(v->{page=2;render();});content.addView(wallet);
-        add(text("Rentabilidade simples compara valor atual e total aplicado, sem rendimentos pagos, impostos ou taxa anualizada. Cotações configuradas atualizam esta soma; posições manuais mantêm o valor informado.",12,MUTED,false),0,12,0,0);
-        b3Summary(false);
-        action("Contas conectadas","Saldos e movimentações pela API Meu Pluggy, dentro do aplicativo.",()->startActivity(new Intent(this,PluggyActivity.class)));
-
+        if(pluggyPanelLoading)add(text("Consultando contas e movimentações no Pluggy…",14,MUTED,false),0,8,0,8);
+        if(!pluggyPanelMessage.isEmpty())add(text(pluggyPanelMessage,14,MUTED,false),0,8,0,8);
+        if(snapshot==null){
+            add(text("Nenhuma consulta do Pluggy disponível neste momento.",15,TEXT,true),0,12,0,8);
+            add(text("Atualize o painel para ler os dados. As movimentações anteriores ficam fora desta visão.",13,MUTED,false),0,0,0,12);
+            return;
+        }
+        add(text("Última consulta: "+pluggyTime(snapshot.observedAt),13,MUTED,false),0,12,0,6);
+        add(text("Período consultado: "+snapshot.from+" a "+snapshot.to,13,MUTED,false),0,0,0,6);
+        add(text("O banco pode ter atualizado os dados antes desta consulta. Consultar não força atualização na instituição.",12,MUTED,false),0,0,0,10);
+        if(snapshot.accounts.isEmpty()){
+            add(text("O Pluggy não retornou contas para as conexões configuradas.",15,TEXT,true),0,14,0,12);return;
+        }
+        ArrayList<String> names=new ArrayList<>();names.add("Todas as contas");int selected=0;
+        for(int i=0;i<snapshot.accounts.size();i++){
+            PluggyClient.Account account=snapshot.accounts.get(i);names.add(account.name+" · "+(account.kind.equals("CREDIT")?"cartão":"conta"));
+            if(pluggyAccountKey(account).equals(pluggySelectedAccount))selected=i+1;
+        }
+        if(selected==0)pluggySelectedAccount="";
+        Spinner accountFilter=select(content,"Conta do painel",names.toArray(new String[0]),selected);accountFilter.setContentDescription("Conta do painel");
+        accountFilter.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener(){
+            public void onNothingSelected(AdapterView<?> parent){}
+            public void onItemSelected(AdapterView<?> parent,View view,int position,long id){
+                String key=position==0?"":pluggyAccountKey(snapshot.accounts.get(position-1));
+                if(!key.equals(pluggySelectedAccount)){pluggySelectedAccount=key;render();}
+            }
+        });
+        for(PluggyClient.Account account:snapshot.accounts){
+            if(!pluggySelectedAccount.isEmpty()&&!pluggySelectedAccount.equals(pluggyAccountKey(account)))continue;
+            LinearLayout card=box(WHITE);card.setContentDescription("Conta do painel "+account.name);
+            card.addView(text(account.name,19,TEXT,true));addTo(card,text(account.kind.equals("CREDIT")?"Cartão de crédito":"Conta bancária",12,MUTED,false),0,4,0,12);
+            card.addView(text("SALDO INFORMADO PELO PLUGGY",12,MUTED,true));addTo(card,text(money(account.balance),28,TEXT,true),0,6,0,10);
+            ArrayList<PluggyClient.Transaction> rows=new ArrayList<>();int pending=0;
+            for(PluggyClient.Transaction row:snapshot.transactions)if(row.itemId.equals(account.itemId)&&row.accountId.equals(account.id)){rows.add(row);if(row.status.equals("PENDING"))pending++;}
+            rows.sort(Comparator.comparing((PluggyClient.Transaction row)->row.date).reversed().thenComparing(row->row.sourceKey));
+            addTo(card,text("Movimentações no período: "+rows.size()+" · Pendentes: "+pending,12,MUTED,false),0,0,0,6);
+            if(rows.isEmpty())addTo(card,text("Nenhuma movimentação retornada nesta conta para o período.",13,MUTED,false),0,8,0,8);
+            for(int i=0;i<Math.min(3,rows.size());i++){
+                PluggyClient.Transaction row=rows.get(i);divider(card);
+                addTo(card,text(hidden?"Movimentação":row.description,14,TEXT,true),0,10,0,4);
+                card.addView(text(row.date+" · "+(row.status.equals("PENDING")?"Pendente no banco":"Confirmada no banco"),12,MUTED,false));
+                addTo(card,text((row.direction.equals("income")?"+ ":"− ")+money(row.amount),17,row.direction.equals("income")?colors.income:RED,true),0,4,0,10);
+            }
+            add(card,0,14,0,4);
+        }
+        add(text("Somente dados consultados do Pluggy. Movimentações locais anteriores, investimentos cadastrados e posição B3 não compõem este painel. A consulta não grava despesas.",12,MUTED,false),0,16,0,0);
     }
+    private String pluggyAccountKey(PluggyClient.Account account){return account.itemId+"\0"+account.id;}
+    private String pluggyTime(String instant){return DateTimeFormatter.ofPattern("dd/MM/yyyy HH:mm",new Locale("pt","BR")).withZone(java.time.ZoneId.of("America/Sao_Paulo")).format(java.time.Instant.parse(instant));}
+    private void maybeRefreshPluggyPanel(){
+        if(!pluggyPanelResumed||page!=0||!canConfirm()||pluggyPanelLoading||!pluggySettings.consultOnEntry()||PluggySnapshotCache.isRecent(this,30_000))return;
+        long now=android.os.SystemClock.elapsedRealtime();if(pluggyPanelLastAttempt>=0&&now>=pluggyPanelLastAttempt&&now-pluggyPanelLastAttempt<30_000)return;
+        refreshPluggyPanel();
+    }
+    void refreshPluggyPanel(){
+        if(!canConfirm()||pluggyPanelLoading)return;
+        if(!pluggySettings.configured()){pluggyPanelMessage="Configure o Meu Pluggy para consultar suas contas.";if(page==0)render();return;}
+        pluggyPanelLastAttempt=android.os.SystemClock.elapsedRealtime();
+        final String revision=pluggySettings.revision();final long session=AuthSession.generation();
+        final PersonalPluggySettings.Credentials credentials;
+        try{credentials=pluggySettings.load();}catch(Exception ex){pluggyPanelMessage="Não foi possível abrir a conexão. Configure o Meu Pluggy novamente.";if(page==0)render();return;}
+        if(!revision.equals(pluggySettings.revision()))return;
+        final LocalDate to=LocalDate.now(java.time.ZoneId.of("America/Sao_Paulo")),from=to.minusDays(29);
+        pluggyPanelLoading=true;pluggyPanelMessage="";pluggyPanelLastAttempt=android.os.SystemClock.elapsedRealtime();final int request=++pluggyPanelGeneration;
+        if(page==0)render();
+        pluggyPanelTask=worker.submit(()->{try{
+            PluggyClient.Snapshot snapshot=pluggyClient.fetch(credentials.clientId,credentials.clientSecret,credentials.itemIds,from,to);
+            runOnUiThread(()->{
+                if(request!=pluggyPanelGeneration)return;
+                pluggyPanelLoading=false;
+                if(session!=AuthSession.generation()||!canConfirm())return;
+                if(!PluggySnapshotCache.publish(this,revision,snapshot)){pluggyPanelMessage="A conexão foi alterada. Atualize o painel novamente.";if(page==0)render();return;}pluggyPanelMessage="Dados consultados no Pluggy.";if(page==0)render();
+            });
+        }catch(Exception ex){runOnUiThread(()->{
+            if(request!=pluggyPanelGeneration)return;
+            pluggyPanelLoading=false;
+            if(session!=AuthSession.generation()||!canConfirm())return;
+            if(!revision.equals(pluggySettings.revision())){pluggyPanelMessage="A conexão foi alterada. Atualize o painel novamente.";if(page==0)render();return;}pluggyPanelMessage="Não foi possível atualizar."+(PluggySnapshotCache.get(this)==null?" Nenhuma consulta disponível.":" Exibindo a última consulta.");if(page==0)render();
+        });}});
+    }
+    private void cancelPluggyPanel(){pluggyPanelGeneration++;if(pluggyPanelTask!=null)pluggyPanelTask.cancel(true);pluggyPanelLoading=false;}
 
     private void monthlySummary(){
         long income=0,expense=0;
@@ -209,11 +276,11 @@ public final class MainActivity extends LockedActivity {
 
     private void transactions(){
         eyebrow("ENTRADAS E SAÍDAS");title("Seus lançamentos");
+        add(text("Registros locais salvos. Eles não compõem o painel do Pluggy.",13,MUTED,false),0,8,0,0);
         LinearLayout actions=row();Button add=button("+  Novo lançamento",GREEN,colors.onPrimary);Button imp=button("Importar extrato",colors.surfaceAlt,GREEN);
         add.setContentDescription("Novo lançamento");imp.setContentDescription("Importar extrato");
         add.setOnClickListener(v->editEntry(null));imp.setOnClickListener(v->chooseDocument(IMPORT));
         actions.addView(add,new LinearLayout.LayoutParams(0,-2,1));Space s=new Space(this);actions.addView(s,new LinearLayout.LayoutParams(dp(8),1));actions.addView(imp,new LinearLayout.LayoutParams(0,-2,1));add(actions,0,16,0,12);
-        action("Revisar notificações ("+notificationInbox.pendingCount()+")","Sugestões só viram lançamentos após sua confirmação.",()->{page=5;render();});
         action("Gerenciar categorias","Criar, editar e excluir categorias.",()->{page=4;render();});monthSelector();monthlySummary();
         LinearLayout chips=row();String[] names={"Todos","Entradas","Saídas"};
         for(int i=0;i<3;i++){final int f=i;TextView chip=text(names[i],13,filter==i?colors.onPrimary:GREEN,true);chip.setGravity(Gravity.CENTER);chip.setPadding(dp(12),dp(12),dp(12),dp(12));chip.setMinHeight(dp(48));chip.setSelected(filter==i);chip.setContentDescription(names[i]);chip.setBackground(feedback(filter==i?GREEN:colors.surfaceAlt,16));chip.setOnClickListener(v->{if(filter!=f){filter=f;visibleEntries=PAGE_SIZE;render();}});
@@ -234,7 +301,7 @@ public final class MainActivity extends LockedActivity {
     }
     private void reports(){
         eyebrow("CLAREZA PARA DECIDIR");title("Relatórios");
-        add(text("Entradas, despesas e resultado do período.",14,MUTED,false),0,6,0,18);
+        add(text("Entradas, despesas e resultado dos lançamentos locais salvos. A consulta do Pluggy não grava registros automaticamente.",14,MUTED,false),0,6,0,18);
         if(reportAccountId!=0&&accountCache.stream().noneMatch(a->a.id==reportAccountId))reportAccountId=0;
         LinearLayout filters=box(WHITE);
         Spinner period=select(filters,"Período do relatório",new String[]{"Este mês","Últimos 3 meses","Este ano","Personalizado"},reportPreset);
@@ -450,7 +517,7 @@ public final class MainActivity extends LockedActivity {
         section("Acesso rápido","Suas preferências e organização");
         action("Bloquear aplicativo","Exigir senha ou biometria para continuar.",()->{AuthSession.lock();startActivity(new Intent(this,LoginActivity.class).putExtra("return_to_activity",true));});
         action("Meu Pluggy","Conectar sua conta pessoal, consultar e revisar transações.",()->startActivity(new Intent(this,PluggyActivity.class)));
-        action("Notificações de transações","Escolha os apps, ative a captura e revise antes de salvar.",()->{page=5;render();});
+        action("Histórico de notificações","Somente leitura. A captura e as atualizações por notificações foram encerradas.",()->{page=5;render();});
         action("Gerenciar categorias","Criar, buscar, editar ou excluir em uma tela própria.",()->{page=4;render();});
         section("Seus dados","Arquivos sob seu controle");
         action("Importar extrato CSV ou OFX","Escolha uma conta, revise e confirme os registros.",()->chooseDocument(IMPORT));
@@ -508,61 +575,17 @@ public final class MainActivity extends LockedActivity {
     }
 
     private void notifications(){
-        eyebrow("LEITURA OPCIONAL E LOCAL");title("Notificações");
-        add(text("Alertas reconhecidos viram sugestões. Você confere os dados e escolhe se deseja salvar cada lançamento.",13,MUTED,false),0,8,0,16);
-        boolean access=NotificationCaptureService.hasAccess(this);Set<String> packages=notificationInbox.allowedPackages();
-        LinearLayout status=box(colors.hero);status.addView(text(notificationInbox.isEnabled()&&access&&!packages.isEmpty()?"CAPTURA ATIVA":"CAPTURA PAUSADA",12,LIME,true));
-        addTo(status,text("Somente os apps escolhidos. Nenhum lançamento é salvo automaticamente.",12,colors.heroText,false),0,8,0,0);content.addView(status);
-        section("Começar","XP, Itaú, Mercado Pago e Samsung Wallet");
-        action("1. Escolher apps",packages.size()+" apps selecionados. Escolha apenas os que deseja acompanhar.",this::chooseNotificationApps);
-        action("2. Permitir acesso no Android",access?"Acesso concedido · toque para gerenciar.":"O Android solicitará sua autorização para ler notificações.",this::explainNotificationAccess);
-        Switch enabled=new Switch(this);enabled.setText(getString(R.string.capture_new_notifications));enabled.setTextColor(TEXT);enabled.setContentDescription("Capturar novas notificações");enabled.setPadding(0,dp(12),0,dp(12));enabled.setChecked(notificationInbox.isEnabled());enabled.setEnabled(notificationInbox.isEnabled()||access&&!packages.isEmpty());
-        enabled.setOnCheckedChangeListener((v,value)->{notificationInbox.setEnabled(value);render();});content.addView(enabled);
-        if(!access||packages.isEmpty())add(text("Escolha os apps e conceda o acesso antes de ligar a captura. Você pode continuar usando todo o controle manual e a importação de extratos.",12,MUTED,false),0,0,0,8);
-        Button refresh=button("Atualizar lista",WHITE,GREEN);refresh.setOnClickListener(v->render());add(refresh,0,12,0,0);
-        List<NotificationInbox.Candidate> pending=notificationInbox.pending();for(Iterator<NotificationInbox.Candidate> i=pending.iterator();i.hasNext();){NotificationInbox.Candidate candidate=i.next();if(store.hasNotificationSource(candidate.sourceKey)){notificationInbox.dismiss(candidate.id);i.remove();}}
-        section("Para revisar ("+pending.size()+")","Revise conta, valor, data, categoria e cartão");
-        if(pending.isEmpty()){LinearLayout empty=box(WHITE);empty(empty,"Nenhuma sugestão pendente","Depois de ativar, novos alertas financeiros compatíveis dos apps escolhidos aparecerão aqui. Não buscamos notificações antigas.");content.addView(empty);}
-        int shown=0;
+        eyebrow("HISTÓRICO PRESERVADO");title("Histórico de notificações");
+        add(text("A captura de notificações foi encerrada. O app não lê novos alertas e este histórico não atualiza saldos, movimentações ou o painel.",14,MUTED,false),0,10,0,16);
+        List<NotificationInbox.Candidate> pending=notificationInbox.pending();
+        section("Sugestões antigas ("+pending.size()+")","Arquivo local somente para consulta");
+        if(pending.isEmpty()){add(text("Nenhuma sugestão antiga armazenada.",14,MUTED,false),0,10,0,12);return;}
         for(NotificationInbox.Candidate candidate:pending){
             LinearLayout card=box(WHITE);card.addView(text(candidate.appLabel+" · "+displayDate(candidate.date),12,MUTED,true));
-            addTo(card,text(candidate.description,16,TEXT,true),0,8,0,0);addTo(card,text((candidate.type.equals("income")?"+ ":"− ")+money(candidate.amountCents),21,candidate.type.equals("income")?GREEN:TEXT,true),0,8,0,0);
-            if(!candidate.lastFour.isEmpty())addTo(card,text("Cartão informado: final "+candidate.lastFour,12,MUTED,false),0,6,0,0);
-            LinearLayout actions=row();Button review=button("Revisar",GREEN,colors.onPrimary);review.setContentDescription("Revisar notificação "+candidate.id);review.setOnClickListener(v->reviewNotification(candidate));
-            Button dismiss=button("Descartar",WHITE,MUTED);dismiss.setContentDescription("Descartar notificação "+candidate.id);dismiss.setOnClickListener(v->{notificationInbox.dismiss(candidate.id);render();});
-            actions.addView(review,new LinearLayout.LayoutParams(0,-2,1));actions.addView(dismiss,new LinearLayout.LayoutParams(0,-2,1));addTo(card,actions,0,14,0,0);add(card,0,0,0,12);shown++;
+            addTo(card,text(hidden?"Movimentação antiga":candidate.description,16,TEXT,true),0,8,0,0);
+            addTo(card,text(money(candidate.amountCents),21,TEXT,true),0,8,0,0);add(card,0,0,0,12);
         }
-        add(text("O formato dos alertas varia por app e Android. Alertas ambíguos, ofertas, códigos de acesso e valores de saldo não são registrados. A data sugerida é a data do alerta: confira-a. Compras podem exigir escolher crédito ou débito. Sugestões ficam por até 30 dias (máximo 100).",12,MUTED,false),0,15,0,0);
-        if(shown>0){Button clear=button("Descartar todas as sugestões",WHITE,RED);clear.setOnClickListener(v->new AlertDialog.Builder(this).setTitle("Descartar sugestões?").setMessage("Seus lançamentos já salvos serão preservados.").setNegativeButton("Cancelar",null).setPositiveButton("Descartar",(d,w)->{notificationInbox.clearPending();render();}).show());add(clear,0,12,0,0);}
-        add(text("O backup JSON guarda os lançamentos confirmados. Sugestões e preferências de captura não entram no backup; após restaurar em outro aparelho, configure a captura novamente.",12,MUTED,false),0,15,0,0);
-    }
-    private void explainNotificationAccess(){
-        new AlertDialog.Builder(this).setTitle("Acesso às notificações")
-            .setMessage("O Android concede um acesso amplo às notificações, que podem conter mensagens e códigos pessoais. O MyFinanceHub filtra os apps que você escolher e só guarda dados resumidos de alertas financeiros reconhecidos, sem enviar nada pela internet. Você pode pausar a captura aqui ou revogar o acesso no Android.")
-            .setNegativeButton("Cancelar",null).setPositiveButton("Abrir configurações",(d,w)->{try{startActivity(NotificationCaptureService.accessSettingsIntent(this));}catch(android.content.ActivityNotFoundException ex){message("O acesso a notificações não está disponível neste aparelho.");}}).show();
-    }
-    @android.annotation.SuppressLint("QueryPermissionsNeeded")
-    private void chooseNotificationApps(){
-        android.content.pm.PackageManager manager=getPackageManager();Intent launcher=new Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LAUNCHER);
-        LinkedHashMap<String,String> available=new LinkedHashMap<>();
-        for(android.content.pm.ResolveInfo info:manager.queryIntentActivities(launcher,0))if(info.activityInfo!=null&&!getPackageName().equals(info.activityInfo.packageName))available.put(info.activityInfo.packageName,info.loadLabel(manager).toString());
-        Set<String> selectedPackages=new HashSet<>(notificationInbox.allowedPackages());for(String selected:selectedPackages)if(!available.containsKey(selected))available.put(selected,selected+" (não encontrado)");
-        ArrayList<Map.Entry<String,String>> apps=new ArrayList<>(available.entrySet());apps.sort((a,b)->{int first=Integer.compare(preferredApp(b.getValue())?1:0,preferredApp(a.getValue())?1:0);return first!=0?first:a.getValue().compareToIgnoreCase(b.getValue());});
-        if(apps.isEmpty()){message("Nenhum app foi encontrado. Instale ou habilite o aplicativo do banco ou carteira e tente novamente.");return;}
-        String[] names=new String[apps.size()];boolean[] checked=new boolean[apps.size()];for(int i=0;i<apps.size();i++){names[i]=apps.get(i).getValue();checked[i]=selectedPackages.contains(apps.get(i).getKey());}
-        new AlertDialog.Builder(this).setTitle("Apps para acompanhar").setMultiChoiceItems(names,checked,(d,index,value)->{if(value)selectedPackages.add(apps.get(index).getKey());else selectedPackages.remove(apps.get(index).getKey());})
-            .setNegativeButton("Cancelar",null).setPositiveButton("Salvar seleção",(d,w)->{notificationInbox.setAllowedPackages(selectedPackages);if(selectedPackages.isEmpty())notificationInbox.setEnabled(false);render();}).show();
-    }
-    private boolean preferredApp(String label){String normalized=normalize(label);return normalized.equals("xp")||normalized.startsWith("xp ")||normalized.contains("itau")||normalized.contains("mercado pago")||normalized.contains("samsung wallet")||normalized.contains("samsung pay");}
-    private void reviewNotification(NotificationInbox.Candidate candidate){
-        if(store.hasNotificationSource(candidate.sourceKey)){notificationInbox.dismiss(candidate.id);render();message("Esta notificação já foi registrada.");return;}
-        Models.Entry entry=new Models.Entry();entry.description=candidate.description;entry.date=candidate.date;entry.type=candidate.type;entry.method=candidate.method;entry.amountCents=candidate.amountCents;entry.sourceKey=candidate.sourceKey;
-        // Choosing the account remains an explicit step; only a unique last-four match is suggested.
-        int matches=0;for(Models.Card card:store.cards())if(!candidate.lastFour.isEmpty()&&card.lastFour.equals(candidate.lastFour)){entry.cardId=card.id;matches++;}if(matches!=1)entry.cardId=0;
-        entry.accountId=0;
-        boolean possibleDuplicate=false;for(Models.Entry saved:store.entries())if(saved.date.equals(entry.date)&&saved.type.equals(entry.type)&&saved.amountCents==entry.amountCents){possibleDuplicate=true;break;}
-        String warning=candidate.reviewNote+(candidate.lastFour.isEmpty()?"":" Cartão informado: final "+candidate.lastFour+".")+(possibleDuplicate?" Já existe um lançamento com a mesma data, tipo e valor: confira se é uma duplicata de extrato ou de outro alerta.":"");
-        new AlertDialog.Builder(this).setTitle("Revisar sugestão de "+candidate.appLabel).setMessage(warning).setNegativeButton("Cancelar",null).setPositiveButton("Conferir dados",(d,w)->editEntry(entry,()->notificationInbox.dismiss(candidate.id),candidate.method.equals("other"))).show();
+        add(text("As movimentações já salvas continuam nos registros locais e no backup. Somente o Pluggy fornece os dados exibidos no painel.",12,MUTED,false),0,12,0,0);
     }
 
     private void editEntry(Models.Entry original){editEntry(original,null,false);}

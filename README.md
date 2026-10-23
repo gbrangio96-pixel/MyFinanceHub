@@ -1,16 +1,16 @@
 # MyFinanceHub para Android
 
-Organizador de finanças pessoais em português. Contas, lançamentos, categorias, importações e relatórios funcionam no aparelho, com acesso local protegido. A versão 0.6.3 corrige a autenticação biométrica e permite gerar um Connect Token com as chaves próprias da API pessoal Meu Pluggy, além de orientar onde encontrá-las. Bloqueia o acesso ao apagar a tela do celular ou completar 10 minutos fora do app, o que ocorrer primeiro, e apresenta contas, saldos e movimentações Meu Pluggy em uma tela nativa, com filtros e busca. Mantém acesso local com senha/biometria e investimentos organizados por tipo, liquidez, vencimento e valor aplicado. Preserva relatórios, cotações, notificações e a confirmação obrigatória antes de gravar lançamentos.
+Organizador de finanças pessoais em português, com acesso local protegido. Na versão 0.6.4, o **Painel usa somente dados consultados do Pluggy, separados por conta**: saldos informados, movimentações e pendências. As movimentações locais inseridas anteriormente para testes ficam fora dessa visão. A captura e as atualizações por notificações foram encerradas. Registros locais, relatórios, carteira, cotações e backup permanecem disponíveis separadamente, com revisão e confirmação antes de salvar despesas. O acesso por senha/biometria, a geração de Connect Token pessoal e o bloqueio ao apagar a tela ou completar dez minutos fora do app são mantidos.
 
 ## Instalar no celular
 
-APK: [`artifacts/MyFinanceHub-0.6.3-release.apk`](artifacts/MyFinanceHub-0.6.3-release.apk). Requer **Android 8.0 ou superior**. Esta versão tem uma única edição, código de versão 12. A captura de notificações é opcional e local; não há integração com WhatsApp nem transcrição de áudio.
+APK: [`artifacts/MyFinanceHub-0.6.4-release.apk`](artifacts/MyFinanceHub-0.6.4-release.apk). Requer **Android 8.0 ou superior**. Esta versão tem uma única edição, código de versão 13. O app não captura notificações; não há integração com WhatsApp nem transcrição de áudio.
 
 Exporte um backup na versão instalada, se ela abrir, e instale o APK por cima, **sem desinstalar**. O pacote `br.com.myfinancehub` e a assinatura de desenvolvimento são mantidos. O banco v4 recebe migração aditiva das versões v1/v2/v3; backups novos são v4 e a restauração aceita v1, v2, v3 e v4. Não abra esse banco em versões antigas do aplicativo.
 
 1. Transfira o APK para o celular e abra o arquivo. Autorize a instalação pelo aplicativo de arquivos, se o Android solicitar.
-2. Confira os dados existentes depois da atualização. Na primeira instalação, a conta “Principal” começa vazia; configure contas e cartões em **Carteira**.
-3. Em **Lançamentos**, use **Novo lançamento**, **Importar extrato** ou **Gerenciar categorias**.
+2. No **Painel → Contas conectadas**, configure a API pessoal Meu Pluggy para ler suas contas. Sem configuração ou consulta disponível, o painel informa essa condição; não usa valores locais de teste como substitutos. A conta local “Principal” permanece em **Carteira**, separada do painel.
+3. Em **Lançamentos**, consulte os registros locais ou use **Novo lançamento**, **Importar extrato** e **Gerenciar categorias**. Esses registros não compõem o painel Pluggy.
 4. Em **Relatórios**, escolha período e conta para consultar entradas, despesas e resultado, salvar PDF/CSV ou compartilhar um PDF.
 5. Em **Ajustes → Aparência**, escolha **Seguir o sistema**, **Claro** ou **Escuro**.
 
@@ -20,15 +20,25 @@ Exporte um backup na versão instalada, se ela abrir, e instale o APK por cima, 
 
 | Tela | Conteúdo |
 | --- | --- |
-| Painel | Saldo das contas e investimentos, com posições cadastradas e B3 separadas |
-| Lançamentos | Cadastro, importação CSV/OFX, resumo mensal, busca, filtros e acesso às categorias |
-| Relatórios | Período e conta, entradas, despesas, resultado, categorias, comparação mensal e exportação |
+| Painel | Dados do Pluggy por conta: saldo informado, até três movimentações recentes, pendências, horário e período da consulta |
+| Lançamentos | Registros locais salvos, cadastro, importação CSV/OFX, resumo mensal, busca, filtros e categorias |
+| Relatórios | Análise dos lançamentos locais salvos, com período/conta, categorias, comparação mensal e exportação |
 | Carteira | Contas, cartões, investimentos, rentabilidade simples, cotações e posição B3 |
-| Ajustes | Aparência, categorias, arquivos, backup e restauração |
+| Ajustes | Aparência, categorias, arquivos, backup, restauração e histórico de notificações somente leitura |
 
 Categorias podem ser criadas, buscadas, editadas e excluídas em **Lançamentos → Gerenciar categorias** ou em **Ajustes**. Excluir uma categoria preserva seus lançamentos. Também é possível criar uma categoria dentro do formulário de lançamento sem perder o preenchimento.
 
 Busca e posição de rolagem são preservadas por tela. As listas de lançamentos e posições B3 começam com 30 resultados e oferecem **Mostrar mais**. A opção **Ocultar valores** acompanha as telas e o conteúdo acessível. A aparência escolhida fica salva neste aparelho e não integra o backup financeiro.
+
+## Painel alimentado pelo Pluggy
+
+Depois do login, o app abre **Contas do Pluggy**. Cada conta bancária ou cartão tem seu próprio bloco, com saldo informado pelo provedor, quantidade de movimentações e pendências no período e até três movimentos recentes. O filtro **Conta do painel** permite ver todas as contas ou uma delas. Contas bancárias e cartões não são somados em um saldo único. A opção **Ocultar valores** também oculta valores e descrições das movimentações dessa visão.
+
+**Atualizar painel** solicita uma consulta à API com o período padrão dos últimos 30 dias. Em **Contas conectadas**, a consulta detalhada permite escolher até 90 dias, pesquisar e filtrar as movimentações. O painel sempre mostra o período efetivo e o horário da resposta exibida. O horário do banco pode ser anterior; consultar a API não força atualização na instituição.
+
+Com **Consultar ao entrar no aplicativo** ativado, o painel solicita os dados em primeiro plano quando necessário. As duas telas compartilham somente em memória a última resposta completa da configuração atual; ao entrar, podem reutilizar uma consulta recebida há menos de 30 segundos. Isso evita consultas repetidas ao navegar e não representa atualização bancária a cada 30 segundos. Fechar o processo elimina essa cópia; alterar a conexão ou desconectar também a invalida. Falhas mantêm a última consulta identificada com seu horário/período. Sem resposta disponível, o app informa a ausência dos dados.
+
+As movimentações locais anteriores, inclusive as inseridas para testes, ficam fora dos números e das listas do painel. Os registros continuam em **Lançamentos**, **Relatórios** e backup; investimentos cadastrados e posição B3 continuam em **Carteira**. Ler o Pluggy não grava despesas ou modifica saldos locais automaticamente. Uma transação confirmada do provedor só vira lançamento local depois de classificação, revisão e confirmação explícitas.
 
 ## Senha e biometria locais
 
@@ -48,23 +58,23 @@ Em **Configurar conexão → Gerar Connect Token**, use Client ID/Secret digitad
 
 A consulta pessoal usa diretamente `https://api.pluggy.ai`, sem hospedagem própria. As credenciais do titular são criptografadas no aparelho com Android Keystore; nenhuma chave particular integra o APK ou o Git. Use somente aplicação/itens próprios. A gratuidade, os limites de conexões e a cobertura dependem das condições do provedor. O app não cria conta paga nem contrata serviço.
 
-Salve a configuração em **Salvar e consultar**, depois use **Atualizar dados**, ou mantenha **Consultar ao entrar no aplicativo**. Escolha até 90 dias. O Meu Pluggy costuma atualizar conexões a cada 24 horas; a consulta não força atualização. A resposta inclui contas, saldos informados, transações e horários/status do provedor. Saldo informado não substitui saldo local. Pendências ficam separadas e não podem ser salvas.
+Salve a configuração em **Salvar e consultar**. Use **Atualizar painel** na tela inicial ou **Atualizar dados** em **Contas conectadas**; a consulta detalhada permite escolher até 90 dias. **Consultar ao entrar no aplicativo** controla a leitura automática em primeiro plano pelo painel. O Meu Pluggy costuma atualizar conexões a cada 24 horas; a consulta não força atualização. A resposta inclui contas, saldos informados, transações e horários/status do provedor. Saldo informado não substitui saldo local. Pendências ficam separadas e não podem ser salvas.
 
 A visão de contas e movimentações usa a proposta de centralização do [S1NC](https://play.google.com/store/apps/details?id=com.w1consultoria.app) como referência de experiência. Mostra cartões nativos por conta, saldos do provedor, horário da consulta, período efetivo dos dados e lista pesquisável. Filtre por conta ou por situação: para revisar, pendentes e já salvas. Uma falha de atualização mantém o resultado anterior identificado com seu horário/período. Nenhum dado é mostrado em página web embutida ou no navegador.
 
-Para salvar uma transação confirmada, escolha explicitamente conta/cartão local, classifique categoria e forma, revise e confirme. A mesma origem não pode ser gravada duas vezes, mesmo após trocar a conta local. CSV, notificações e conexões recriadas ainda exigem reconciliação. A consulta não importa investimentos nem modifica a posição B3.
+Para salvar uma transação confirmada, escolha explicitamente conta/cartão local, classifique categoria e forma, revise e confirme. A mesma origem não pode ser gravada duas vezes, mesmo após trocar a conta local. CSV, registros históricos de notificações e conexões recriadas ainda podem exigir reconciliação com os lançamentos já salvos. A consulta não importa investimentos nem modifica a posição B3.
 
-## Notificações e confirmação
+## Notificações encerradas e confirmação de despesas
 
-Em **Ajustes → Notificações de transações**, selecione os apps, conceda acesso nas configurações do Android e ative a captura. Ela começa desligada em instalações novas. Somente novos alertas financeiros compatíveis dos apps selecionados viram sugestões locais; nada é gravado no livro financeiro automaticamente. O reconhecimento depende do texto enviado pelo banco/carteira.
+O app não lê novos alertas, não solicita acesso às notificações e não oferece controles para reativar a captura. A atualização permanece desligada mesmo quando uma instalação anterior tinha habilitado essa função. O painel recebe seus dados exclusivamente do Pluggy.
 
-Em **Lançamentos → Revisar notificações**, confira a sugestão, escolha explicitamente a conta e ajuste os dados. No formulário manual ou de notificação, toque **Revisar**, confira o resumo e toque **Confirmar e salvar**. **Voltar à revisão** mantém o preenchimento sem gravar. Cancelar, voltar, fechar ou recriar a tela não confirma uma despesa. Importações mostram todos os registros para revisão e exigem o botão **Importar**.
+**Ajustes → Histórico de notificações** preserva as sugestões antigas como arquivo local somente leitura. Abrir esse histórico não expira ou promove sugestões a lançamentos. Ele não compõe o painel e não integra o backup financeiro; movimentações que já haviam sido confirmadas continuam nos registros locais e no backup.
 
-Sugestões são guardadas separadamente dos dados financeiros, por até 30 dias, com limite de 100. Não integram o backup JSON. A mesma origem de notificação não pode ser confirmada duas vezes, mesmo em contas diferentes; alertas de origens diferentes ainda podem exigir conciliação manual. A captura não usa rede nem registra o texto integral das notificações. Pause-a no app ou revogue o acesso no Android quando desejar.
+No formulário manual ou ao revisar uma transação confirmada do Pluggy, toque **Revisar**, confira o resumo e toque **Confirmar e salvar**. **Voltar à revisão** mantém o preenchimento sem gravar. Cancelar, voltar, fechar ou recriar a tela não confirma uma despesa. Importações mostram todos os registros para revisão e exigem o botão **Importar**.
 
 ## Relatórios
 
-O destaque é **entradas, despesas e resultado do período**. Selecione **Este mês**, **Últimos 3 meses**, **Este ano** ou **Personalizado**, com todas as contas ou uma conta específica. Os dias inicial e final são inclusivos; o limite é de 120 meses. As datas efetivas ficam visíveis, inclusive quando o período inclui lançamentos futuros já cadastrados.
+Os relatórios usam os **lançamentos locais salvos**, com destaque para entradas, despesas e resultado do período. Uma consulta mostrada no painel Pluggy não é importada automaticamente para esses relatórios. Selecione **Este mês**, **Últimos 3 meses**, **Este ano** ou **Personalizado**, com todas as contas ou uma conta específica. Os dias inicial e final são inclusivos; o limite é de 120 meses. As datas efetivas ficam visíveis, inclusive quando o período inclui lançamentos futuros já cadastrados.
 
 Compras no crédito entram nas despesas. Transferências entre contas próprias e pagamentos de fatura ficam fora do resultado, evitando contar o pagamento novamente depois da compra. A **movimentação nas contas** é separada: inclui transferências e faturas, exclui crédito e não representa saldo inicial ou final histórico.
 
@@ -94,7 +104,7 @@ O SQLite fica no armazenamento privado do aplicativo. Valores financeiros usam c
 
 O armazenamento não possui senha ou criptografia própria do app; proteja o aparelho com bloqueio de tela. Backups JSON, CSV e PDF exportados não são criptografados. O backup automático do Android está desativado. A chave do provedor, preferências e cache de cotações não fazem parte do backup financeiro; os dados de cotação já aplicados a investimentos cadastrados fazem parte do backup v4.
 
-O saldo de uma conta é seu saldo inicial, mais entradas e menos saídas **fora do crédito**. Compras e estornos no crédito ficam associados ao cartão e não alteram o caixa. Ao pagar a fatura, cadastre uma **saída** na conta debitada com a forma **Pagamento de fatura**: ela reduz o saldo sem repetir a despesa no resultado. Ao importar extratos genéricos, revise essa forma manualmente.
+Em **Carteira**, o saldo calculado de uma conta local é seu saldo inicial, mais entradas e menos saídas **fora do crédito**. Esse cálculo não fornece o saldo do painel, que vem da resposta do Pluggy. Compras e estornos no crédito ficam associados ao cartão e não alteram o caixa. Ao pagar a fatura, cadastre uma **saída** na conta debitada com a forma **Pagamento de fatura**: ela reduz o saldo sem repetir a despesa no resultado. Ao importar extratos genéricos, revise essa forma manualmente.
 
 Os totais de cartão mostram o **mês civil escolhido em Lançamentos**, não uma fatura calculada pelo fechamento. Parcelamento, juros e conciliação automática de faturas não são calculados; fechamento e vencimento são referências.
 
@@ -134,7 +144,7 @@ Identificadores `FITID`/`id` detectam reimportações na mesma conta. Sem identi
 
 PDF, fotos e formatos proprietários não são suportados. O CSV serve para planilhas e protege campos textuais contra fórmulas. O **backup JSON** preserva os dados originais e todos os vínculos, com limite de 8 MiB por backup nesta versão. Bases maiores exigem exportação CSV e não têm restauração integral suportada. Restaurar exige confirmação e substitui todo o conteúdo atual de forma transacional; backups inválidos são rejeitados sem apagar a base.
 
-Consulte o [registro de validação da 0.6.3](docs/VALIDACAO-0.6.3.md) para testes e limites da verificação.
+Consulte o [registro de validação da 0.6.4](docs/VALIDACAO-0.6.4.md) para testes e limites da verificação.
 
 ## Desenvolvimento
 
@@ -161,8 +171,8 @@ Comandos individuais:
 `verify.sh` executa testes, lint e build da única edição. APK gerado: `app/build/outputs/apk/debug/app-debug.apk`. Relatórios dos verificadores: `app/build/reports/`. Para atualizar a cópia distribuível após concluir a validação:
 
 ```sh
-cp app/build/outputs/apk/release/app-release.apk artifacts/MyFinanceHub-0.6.3-release.apk
-sha256sum artifacts/MyFinanceHub-0.6.3-release.apk > artifacts/MyFinanceHub-0.6.3-release.apk.sha256
+cp app/build/outputs/apk/release/app-release.apk artifacts/MyFinanceHub-0.6.4-release.apk
+sha256sum artifacts/MyFinanceHub-0.6.4-release.apk > artifacts/MyFinanceHub-0.6.4-release.apk.sha256
 ```
 
 No Android Studio, configure JDK compatível e SDK 35. `local.properties`, chaves e saídas de build são ignorados. Os testes substituem as consultas de mercado por respostas fictícias: montar e validar o APK não exige chave brapi, credenciais bancárias ou backend. A validação HTTPS opcional usa apenas símbolos públicos, sem dados pessoais.
@@ -178,6 +188,6 @@ O Android não está conectado a esse backend. A execução real depende de cada
 
 ## Validação no celular
 
-Siga o [roteiro de testes no Android](docs/TESTES-NO-CELULAR.md) para verificar atualização preservando dados, temas, importações, relatórios, compartilhamento e cotações. O roteiro é uma lista de verificações, não uma declaração de testes já realizados no seu aparelho.
+Depois de atualizar, confira o painel Pluggy por conta, o horário/período da consulta, a preservação dos registros locais e a ausência de controles de captura de notificações. O [registro da 0.6.4](docs/VALIDACAO-0.6.4.md) descreve a validação e seus limites. O [roteiro histórico de Android](docs/TESTES-NO-CELULAR.md) conserva verificações de versões anteriores; seus valores e expectativas do painel antigo não descrevem esta versão. Nenhum desses documentos declara teste já realizado no seu aparelho.
 
-A leitura pessoal de contas e transações Meu Pluggy está implementada; requer credenciais e conexões autorizadas do titular. Pagamentos Pix, integração direta com carteiras e sincronização automática da custódia B3 não estão implementados. Notificações compatíveis geram somente sugestões para revisão; WhatsApp e transcrição não estão integrados. Documentos de validação de versões antigas permanecem como histórico; não descrevem as opções da 0.6.3.
+A leitura pessoal de contas e transações Meu Pluggy está implementada; requer credenciais e conexões autorizadas do titular. Pagamentos Pix, integração direta com carteiras e sincronização automática da custódia B3 não estão implementados. A captura de notificações está encerrada; somente seu histórico anterior permanece para consulta. WhatsApp e transcrição não estão integrados. Documentos de validação de versões antigas permanecem como histórico; não descrevem as opções da 0.6.4.

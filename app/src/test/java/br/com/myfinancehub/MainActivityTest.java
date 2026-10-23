@@ -58,6 +58,8 @@ public final class MainActivityTest {
         context = RuntimeEnvironment.getApplication();
         context.getSharedPreferences("appearance", Context.MODE_PRIVATE).edit().clear().commit();
         context.getSharedPreferences("MainActivity", Context.MODE_PRIVATE).edit().clear().commit();
+        context.getSharedPreferences("personal_pluggy_private", Context.MODE_PRIVATE).edit().clear().commit();
+        PluggySnapshotCache.clear(context);
         context.deleteDatabase("myfinancehub.db");
         controller = Robolectric.buildActivity(MainActivity.class).setup();
         activity = controller.get();
@@ -79,13 +81,16 @@ public final class MainActivityTest {
         context.deleteDatabase("myfinancehub.db");
         context.getSharedPreferences("appearance", Context.MODE_PRIVATE).edit().clear().commit();
         context.getSharedPreferences("MainActivity", Context.MODE_PRIVATE).edit().clear().commit();
+        context.getSharedPreferences("personal_pluggy_private", Context.MODE_PRIVATE).edit().clear().commit();
+        PluggySnapshotCache.clear(context);
     }
 
     @Test public void emptyInstallNavigatesAllFiveTabsWithoutInventedMoney() {
-        assertVisible("Seu dinheiro");
-        assertVisible("SALDO NAS CONTAS");
-        assertVisible("Investimentos");
-        assertVisible("VALOR ATUAL");
+        assertVisible("Contas do Pluggy");
+        assertVisible("Configure o Meu Pluggy para consultar suas contas.");
+        assertNull(byText(screen(), "SALDO NAS CONTAS"));
+        assertNull(byText(screen(), "VALOR ATUAL"));
+        assertNull(byText(screen(), "R$ 0,00"));
         assertNull(byDescription(screen(), "Importar extrato"));
         assertNull(byText(screen(), "+  Novo lançamento"));
         assertNull(byText(screen(), "↗  Entradas"));
@@ -113,7 +118,7 @@ public final class MainActivityTest {
         assertVisible("Organize sua rotina");
         assertVisible("Gerenciar categorias  →");
         tab("Painel");
-        assertVisible("Seu dinheiro");
+        assertVisible("Contas do Pluggy");
         assertTrue(store.entries().isEmpty());
     }
 
@@ -121,8 +126,8 @@ public final class MainActivityTest {
     public void android15OpensAndNavigatesInLightAndDarkModesWithoutChangingFinancialData() {
         String original = store.exportBackup();
         assertFalse(AppAppearance.isDark(activity));
-        assertVisible("Seu dinheiro");
-        assertVisible("SALDO NAS CONTAS");
+        assertVisible("Contas do Pluggy");
+        assertVisible("Configure o Meu Pluggy para consultar suas contas.");
         tab("Lançamentos");
         assertVisible("Seus lançamentos");
         assertNotNull(byDescription(screen(), "Novo lançamento"));
@@ -135,8 +140,8 @@ public final class MainActivityTest {
         assertTrue(AppAppearance.isDark(activity));
         assertVisible("Seus lançamentos");
         tab("Painel");
-        assertVisible("Seu dinheiro");
-        assertVisible("Investimentos");
+        assertVisible("Contas do Pluggy");
+        assertVisible("Configure o Meu Pluggy para consultar suas contas.");
         tab("Lançamentos");
         assertVisible("Seus lançamentos");
         assertNotNull(byDescription(screen(), "Importar extrato"));
@@ -209,7 +214,7 @@ public final class MainActivityTest {
     }
 
     @Test public void transactionsKeepCreationAndImportTogetherWithoutNavigatingToSettings() {
-        assertVisible("Seu dinheiro");
+        assertVisible("Contas do Pluggy");
         assertNull(byDescription(screen(), "Importar extrato"));
         tab("Lançamentos");
         assertNotNull(byDescription(screen(), "Novo lançamento"));
@@ -396,30 +401,36 @@ public final class MainActivityTest {
         assertNotNull(metricLabel);
         assertContains((View) metricLabel.getParent(), "R$ 55,90");
         tab("Painel");
-        assertContains(screen(), "R$ 944,10");
+        assertVisible("Configure o Meu Pluggy para consultar suas contas.");
+        assertFalse("The panel must not reuse the local ledger balance",textsContain(screen(),"R$ 944,10"));
     }
 
-    @Test public void dashboardShowsCashAndInvestmentPositionsWithoutAddingThemToTheSameBalance() {
+    @Test public void dashboardExcludesLocalBalancesAndInvestmentsWhileWalletPreservesThem() {
         Models.Account account = store.accounts().get(0);
         account.openingCents = 123456;
         store.saveAccount(account);
         store.saveInvestment(new Models.Investment(0, "Reserva", "", "Renda fixa", 500000, 525000));
         store.saveInvestment(new Models.Investment(0, "Posição manual", "DEMO", "Ações", 100000, 95000));
+        String original=store.exportBackup();
         tab("Carteira");
-        tab("Painel");
-        assertVisible("Seu dinheiro");
         assertContains(screen(), "R$ 1.234,56");
         assertContains(screen(), "R$ 6.200,00");
-        assertNotNull(byText(screen(), "Total aplicado"));
-        assertNotNull(byText(screen(), "Rentabilidade simples"));
-        assertContains((View) byText(screen(), "Total aplicado").getParent(), "R$ 6.000,00");
-        assertContains((View) byText(screen(), "Rentabilidade simples").getParent(), "R$ 200,00");
-        assertContains((View) byText(screen(), "Rentabilidade simples").getParent(), "3,33%");
+        assertContains(screen(), "R$ 6.000,00");
+        assertContains(screen(), "R$ 200,00");
+        assertContains(screen(), "3,33%");
+        assertVisible("Reserva");
+        assertVisible("Posição manual · DEMO");
+        tab("Painel");
+        assertVisible("Contas do Pluggy");
+        assertVisible("Configure o Meu Pluggy para consultar suas contas.");
+        for(String excluded:new String[]{"R$ 1.234,56","R$ 6.200,00","R$ 6.000,00","Reserva","Posição manual","Rentabilidade simples"})
+            assertFalse("Local portfolio data must not be presented as Pluggy data: "+excluded,textsContain(screen(),excluded));
+        assertEquals(original,store.exportBackup());
         assertEquals(123456, store.totalBalance());
         assertTrue(store.entries().isEmpty());
         assertNull(byText(screen(), "Últimos lançamentos"));
         assertNull(byText(screen(), "Para onde foi?"));
-        clickClickable(byDescription(screen(), "Ver carteira"));
+        tab("Carteira");
         assertVisible("Sua carteira");
         assertVisible("Reserva");
         assertVisible("Posição manual · DEMO");
@@ -744,6 +755,11 @@ public final class MainActivityTest {
         assertVisible("Categorias");
     }
     private void assertVisible(String text) { assertNotNull("Missing text: " + text, byText(screen(), text)); }
+    private static boolean textsContain(View root,String text){
+        List<String> texts=new ArrayList<>();collectTexts(root,texts);
+        for(String value:texts)if(value.replace('\u00a0',' ').replace('\u202f',' ').contains(text))return true;
+        return false;
+    }
     private static void assertContains(View root, String text) {
         List<String> texts = new ArrayList<>(); collectTexts(root, texts);
         for (String value : texts) if (value.replace('\u00a0', ' ').replace('\u202f', ' ').contains(text)) return;

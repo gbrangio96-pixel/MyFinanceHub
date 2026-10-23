@@ -22,8 +22,8 @@ import static org.robolectric.Shadows.shadowOf;
 @RunWith(RobolectricTestRunner.class) @Config(sdk=28,qualifiers="pt-rBR")
 public class PluggyActivityTest {
     Context context;FinanceStore store;PluggyActivity activity;ActivityController<PluggyActivity> controller;
-    @Before public void before(){context=RuntimeEnvironment.getApplication();context.deleteDatabase("myfinancehub.db");context.getSharedPreferences("personal_pluggy_private",0).edit().clear().commit();controller=Robolectric.buildActivity(PluggyActivity.class).setup().visible();activity=controller.get();store=new FinanceStore(context);idle();}
-    @After public void after(){AlertDialog d=ShadowAlertDialog.getLatestAlertDialog();if(d!=null)d.dismiss();controller.pause().stop().destroy();store.close();context.deleteDatabase("myfinancehub.db");context.getSharedPreferences("personal_pluggy_private",0).edit().clear().commit();}
+    @Before public void before(){context=RuntimeEnvironment.getApplication();PluggySnapshotCache.clear(context);context.deleteDatabase("myfinancehub.db");context.getSharedPreferences("personal_pluggy_private",0).edit().clear().commit();controller=Robolectric.buildActivity(PluggyActivity.class).setup().visible();activity=controller.get();store=new FinanceStore(context);idle();}
+    @After public void after(){AlertDialog d=ShadowAlertDialog.getLatestAlertDialog();if(d!=null)d.dismiss();controller.pause().stop().destroy();store.close();context.deleteDatabase("myfinancehub.db");context.getSharedPreferences("personal_pluggy_private",0).edit().clear().commit();PluggySnapshotCache.clear(context);}
     @Test public void openingShowsNativeDashboardWithoutPortalOrCredentialFields() {
         assertTrue(store.entries().isEmpty());assertEquals(0,store.totalBalance());
         assertTrue(containsText(allTexts(screen()),"Suas contas, no app"));
@@ -125,6 +125,22 @@ public class PluggyActivityTest {
         NativeApi api=prepareNativeQuery();controller.pause().resume();drainWorker();
         assertEquals(5,api.calls.size());assertEquals(2,transactionRows().size());assertNull(shadowOf(activity).getNextStartedActivity());assertTrue(store.entries().isEmpty());
         controller.pause().resume();drainWorker();assertEquals("Returning from a short pause must not duplicate the entry query",5,api.calls.size());assertEquals(0,store.totalBalance());
+    }
+    @Test public void successfulQuerySharesTheCompleteResponseAndReopeningAvoidsADuplicateRequest()throws Exception {
+        NativeApi api=prepareNativeQuery();PersonalPluggySettings saved=activity.settings;String before=store.exportBackup();
+        activity.query();drainWorker();PluggyClient.Snapshot shared=PluggySnapshotCache.get(context);assertNotNull(shared);assertEquals(2,shared.accounts.size());assertEquals(2,shared.transactions.size());assertTrue(PluggySnapshotCache.isRecent(context,30_000));
+        controller.pause().stop().destroy();controller=Robolectric.buildActivity(PluggyActivity.class).create();activity=controller.get();activity.settings=saved;activity.client=new PluggyPersonalClient(api,Clock.fixed(Instant.parse("2026-10-22T12:00:00Z"),ZoneOffset.UTC));controller.start().resume().visible();drainWorker();
+        assertEquals("A fresh provider response is reused across native screens",5,api.calls.size());assertEquals(2,transactionRows().size());assertTrue(containsText(allTexts(screen()),"Conta nativa de teste"));assertSame(shared,PluggySnapshotCache.get(context));assertEquals(before,store.exportBackup());assertNull(shadowOf(activity).getNextStartedActivity());
+    }
+    @Test public void changingTheConnectionWhileAQueryRunsRejectsItsLateAccountsAndTransactions()throws Exception {
+        NativeApi api=prepareNativeQuery();CountDownLatch entered=new CountDownLatch(1),release=new CountDownLatch(1);String before=store.exportBackup();
+        activity.client=new PluggyPersonalClient((method,uri,headers,body)->{
+            if(uri.getPath().equals("/auth")){entered.countDown();try{if(!release.await(10,TimeUnit.SECONDS))throw new IOException();}catch(InterruptedException interrupted){Thread.currentThread().interrupt();throw new IOException();}}
+            return api.request(method,uri,headers,body);
+        },Clock.fixed(Instant.parse("2026-10-22T12:00:00Z"),ZoneOffset.UTC));
+        activity.query();assertTrue(entered.await(10,TimeUnit.SECONDS));
+        try{context.getSharedPreferences("personal_pluggy_private",0).edit().putString("credentials","replacement-fixture-ciphertext").commit();}finally{release.countDown();}
+        drainWorker();assertNull(PluggySnapshotCache.get(context));assertTrue(transactionRows().isEmpty());assertFalse(containsText(allTexts(screen()),"Conta nativa de teste"));assertEquals(before,store.exportBackup());
     }
     @Test public void nativeFiltersKeepPendingReadOnlyAndOnlyExplicitConfirmationSavesPostedMovement()throws Exception {
         prepareNativeQuery();activity.query();drainWorker();

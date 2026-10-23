@@ -53,11 +53,8 @@ public final class LoginActivity extends Activity {
     }
     private void enter(){if(destroyed||isFinishing()||!AuthSession.isUnlocked())return;
         boolean returning=getIntent().getBooleanExtra("return_to_activity",false);
-        if(new PersonalPluggySettings(this).consultOnEntry()){
-            Intent query=new Intent(this,PluggyActivity.class).putExtra("consult_on_entry",true).addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP);
-            if(returning)startActivity(query);else startActivities(new Intent[]{new Intent(this,MainActivity.class),query});
-            finish();
-        }else if(returning)finish();else{startActivity(new Intent(this,MainActivity.class));finish();}
+        // The main dashboard owns foreground Pluggy consultation after local authentication.
+        if(returning)finish();else{startActivity(new Intent(this,MainActivity.class));finish();}
     }
     private void recover(){
         if(busy||destroyed||isFinishing())return;LinearLayout form=column();form.setPadding(dp(24),dp(12),dp(24),dp(16));EditText login=field(form,"Login",auth.username(),false),code=field(form,"Código de recuperação","",true),next=field(form,"Nova senha","",true),again=field(form,"Confirmar nova senha","",true);ScrollView scroll=new ScrollView(this);scroll.addView(form);

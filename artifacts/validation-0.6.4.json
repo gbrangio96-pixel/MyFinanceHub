@@ -1,0 +1,54 @@
+{
+  "version": "0.6.4",
+  "versionCode": 13,
+  "validationDate": "2026-10-23",
+  "baseCommit": "e0eb98bcf4cda22a0ee269b832194a2ef3787e37",
+  "command": "./scripts/verify.sh --no-build-cache",
+  "buildSuccessful": true,
+  "unitTests": {
+    "tests": 442,
+    "failures": 0,
+    "errors": 0,
+    "skipped": 0
+  },
+  "lintDebug": "No issues found.",
+  "lintRelease": "No issues found.",
+  "apk": {
+    "path": "artifacts/MyFinanceHub-0.6.4-release.apk",
+    "bytes": 200412,
+    "sha256": "654d321ddd57312996ed372b598c802cff3bb0e7a9468c97573e11075b09ff5c",
+    "debuggable": false,
+    "alignmentVerified": true,
+    "signingCertificateSha256": "3aed65b8149ccd92287cc1055b57a5ae6b909f12d9282ffab221c24a8dadb446",
+    "signingCertificatePreserved": true
+  },
+  "dashboard": {
+    "source": "Pluggy API only",
+    "accountIdentity": [
+      "itemId",
+      "accountId"
+    ],
+    "legacyMovementsExcluded": true,
+    "bankAndCreditBalancesAggregated": false,
+    "snapshotCache": "in-process only; bound to encrypted configuration revision and monotonic time",
+    "apiReadSavesLedgerAutomatically": false
+  },
+  "notifications": {
+    "captureEnabled": false,
+    "listenerDeclared": false,
+    "legacyArchiveReadOnly": true
+  },
+  "dataPreservation": {
+    "legacyLedgerDeleted": false,
+    "databaseSchemaChanged": false,
+    "backupVersion": 4,
+    "reportsAndWalletPreserved": true
+  },
+  "limits": {
+    "realFinancialDataRead": false,
+    "providerCredentialsUsed": false,
+    "physicalDeviceTested": false,
+    "playStorePublished": false,
+    "onlineAccountOrBackendDeployed": false
+  }
+}

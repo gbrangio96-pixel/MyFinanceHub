@@ -3,10 +3,7 @@ package br.com.myfinancehub;
 import android.content.ComponentName;
 import android.content.Context;
 import android.content.Intent;
-import android.content.pm.PackageInfo;
 import android.content.pm.PackageManager;
-import android.database.Cursor;
-import android.database.sqlite.SQLiteDatabase;
 import android.os.Bundle;
 import android.os.Looper;
 import android.provider.Settings;
@@ -33,12 +30,11 @@ import java.util.concurrent.TimeUnit;
 import static org.junit.Assert.*;
 import static org.robolectric.Shadows.shadowOf;
 
-/** Single APK restores optional capture while preserving confirmed financial records. */
+/** The updated APK retires notification capture without deleting historical financial data. */
 @RunWith(RobolectricTestRunner.class)
 @Config(sdk = 28, qualifiers = "pt-rBR")
 public final class LocalBuildTest {
     private static final String OLD_QUEUE = "myfinancehub-notifications.db";
-    private static final String OLD_SERVICE = "br.com.myfinancehub.NotificationCaptureService";
     private Context context;
     private FinanceStore store;
     private ActivityController<MainActivity> controller;
@@ -69,23 +65,34 @@ public final class LocalBuildTest {
         }
     }
 
-    @Test public void listenerIsPermissionProtectedAndCaptureIsInitiallyDisabled() throws Exception {
-        android.content.pm.ServiceInfo service=context.getPackageManager().getServiceInfo(new ComponentName(context,NotificationCaptureService.class),0);
-        assertTrue(service.exported);assertEquals("android.permission.BIND_NOTIFICATION_LISTENER_SERVICE",service.permission);
+    @Test public void notificationListenerIsAbsentEvenWhenIncludingDisabledComponents() throws Exception {
+        PackageManager manager=context.getPackageManager();
+        try {
+            manager.getServiceInfo(new ComponentName(context,NotificationCaptureService.class),PackageManager.MATCH_DISABLED_COMPONENTS);
+            fail("A retired listener must not remain bindable or re-enableable in the manifest");
+        } catch(PackageManager.NameNotFoundException expected) { }
+        Intent listener=new Intent(NotificationListenerService.SERVICE_INTERFACE).setPackage(context.getPackageName());
+        assertTrue(manager.queryIntentServices(listener,PackageManager.MATCH_DISABLED_COMPONENTS).isEmpty());
         try(NotificationInbox inbox=new NotificationInbox(context)) {
-            assertFalse(inbox.isEnabled());assertTrue(inbox.allowedPackages().isEmpty());
+            inbox.pendingCount();NotificationLegacyFixtures.legacyEnabled(context,true);
+            inbox.setEnabled(true);assertFalse(inbox.isEnabled());
         }
+        Settings.Secure.putString(context.getContentResolver(),"enabled_notification_listeners",
+                new ComponentName(context,NotificationCaptureService.class).flattenToString());
+        assertFalse(NotificationCaptureService.hasAccess(context));
         start(null);assertTrue(store.entries().isEmpty());assertEquals(0,store.totalBalance());
+        assertNull(shadowOf(activity).getNextStartedActivity());
     }
 
     @Test public void historicalConfirmedRecordsSurviveNavigationAndRecreation() {
-        String key="notification:"+new String(new char[64]).replace('\0','a');
+        String key="notification:"+"a".repeat(64);
         store.saveReviewedNotification(new Models.Entry(0,store.accounts().get(0).id,0,0,"Registro preservado",LocalDate.now().toString(),"expense","pix",key,1234));
         String backup=store.exportBackup();start(null);
-        click(byDescription(screen(),"Lançamentos"));click(byDescription(screen(),"Revisar notificações (0)"));
-        assertNotNull(byText(screen(),"Nenhuma sugestão pendente"));
+        click(byDescription(screen(),"Ajustes"));click(byDescription(screen(),"Histórico de notificações"));
+        assertNotNull(byText(screen(),"HISTÓRICO PRESERVADO"));
         controller.recreate();activity=controller.get();idle();
         assertEquals(backup,store.exportBackup());assertEquals(-1234,store.totalBalance());assertTrue(store.hasNotificationSource(key));
+        assertNull(byDescription(screen(),"Capturar novas notificações"));
     }
 
     private void start(Bundle state) {

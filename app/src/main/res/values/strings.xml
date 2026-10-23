@@ -7,8 +7,6 @@
     <string name="quotes_search_invalid">Informe o código ou nome do ativo, com até 80 caracteres.</string>
     <string name="quotes_received">Cotação recebida. Confira o horário do dado.</string>
     <string name="credit_statement">Extrato de cartão de crédito</string>
-    <string name="notification_access_label">MyFinanceHub — sugestões de transações</string>
-    <string name="capture_new_notifications">Capturar novas notificações</string>
     <string name="pluggy_consult_entry">Consultar ao entrar no aplicativo</string>
     <string name="pluggy_disconnected">Desconectado neste aparelho.</string>
     <string name="pluggy_consulting">Consultando a API pessoal Meu Pluggy… Nenhum lançamento será salvo automaticamente.</string>

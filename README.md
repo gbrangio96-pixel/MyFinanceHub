@@ -1,10 +1,10 @@
 # MyFinanceHub para Android
 
-Organizador de finanças pessoais em português. Contas, lançamentos, categorias, importações e relatórios funcionam no aparelho, com acesso local protegido. A versão 0.6.2 bloqueia o acesso ao apagar a tela do celular ou completar 10 minutos fora do app, o que ocorrer primeiro, e apresenta contas, saldos e movimentações Meu Pluggy em uma tela nativa, com filtros e busca. Mantém acesso local com senha/biometria e investimentos organizados por tipo, liquidez, vencimento e valor aplicado. Preserva relatórios, cotações, notificações e a confirmação obrigatória antes de gravar lançamentos.
+Organizador de finanças pessoais em português. Contas, lançamentos, categorias, importações e relatórios funcionam no aparelho, com acesso local protegido. A versão 0.6.3 corrige a autenticação biométrica e permite gerar um Connect Token com as chaves próprias da API pessoal Meu Pluggy, além de orientar onde encontrá-las. Bloqueia o acesso ao apagar a tela do celular ou completar 10 minutos fora do app, o que ocorrer primeiro, e apresenta contas, saldos e movimentações Meu Pluggy em uma tela nativa, com filtros e busca. Mantém acesso local com senha/biometria e investimentos organizados por tipo, liquidez, vencimento e valor aplicado. Preserva relatórios, cotações, notificações e a confirmação obrigatória antes de gravar lançamentos.
 
 ## Instalar no celular
 
-APK: [`artifacts/MyFinanceHub-0.6.2-release.apk`](artifacts/MyFinanceHub-0.6.2-release.apk). Requer **Android 8.0 ou superior**. Esta versão tem uma única edição, código de versão 11. A captura de notificações é opcional e local; não há integração com WhatsApp nem transcrição de áudio.
+APK: [`artifacts/MyFinanceHub-0.6.3-release.apk`](artifacts/MyFinanceHub-0.6.3-release.apk). Requer **Android 8.0 ou superior**. Esta versão tem uma única edição, código de versão 12. A captura de notificações é opcional e local; não há integração com WhatsApp nem transcrição de áudio.
 
 Exporte um backup na versão instalada, se ela abrir, e instale o APK por cima, **sem desinstalar**. O pacote `br.com.myfinancehub` e a assinatura de desenvolvimento são mantidos. O banco v4 recebe migração aditiva das versões v1/v2/v3; backups novos são v4 e a restauração aceita v1, v2, v3 e v4. Não abra esse banco em versões antigas do aplicativo.
 
@@ -34,13 +34,17 @@ Busca e posição de rolagem são preservadas por tela. As listas de lançamento
 
 Na primeira abertura, crie um login local e uma senha de 8 a 128 caracteres, com maiúscula, minúscula, número e caractere especial. A senha não é enviada a um serviço: o aparelho guarda somente sua derivação PBKDF2-HMAC-SHA256 com sal aleatório. Após cinco erros há bloqueio temporário. Ao sair para outro aplicativo, o login permanece válido por até 10 minutos, desde que o celular continue desbloqueado e com a tela acesa. O primeiro evento encerra a sessão: apagar/bloquear a tela ou completar 10 minutos em segundo plano. Voltar antes do prazo dispensa a senha somente se a tela não tiver apagado. Navegar entre telas e girar o aparelho não encerram a sessão. O botão Bloquear aplicativo encerra o acesso imediatamente. Desbloquear o celular não desbloqueia o app: entre novamente com senha ou biometria. Se o Android encerrar o processo, a próxima abertura exige novo login, pois o app não pode verificar bloqueios ocorridos enquanto estava encerrado. A concessão de acesso não é persistida. A atualização da 0.6.1 descarta apenas a concessão antiga de sessão, preservando senha, biometria e dados.
 
-Guarde o **código de recuperação** exibido uma vez em um gerenciador de senhas ou fora do aparelho. Ele permite trocar a senha sem apagar os dados e é renovado após recuperação. Não há conta online, recuperação por e-mail nem sincronização financeira entre celulares. Android 9 ou posterior pode oferecer biometria forte cadastrada no sistema, opcional e vinculada ao Android Keystore. Android 8 usa senha. Alterar a biometria do aparelho pode exigir nova ativação pelo login com senha.
+Guarde o **código de recuperação** exibido uma vez em um gerenciador de senhas ou fora do aparelho. Ele permite trocar a senha sem apagar os dados e é renovado após recuperação. Não há conta online, recuperação por e-mail nem sincronização financeira entre celulares. Android 9 ou posterior pode oferecer biometria forte cadastrada no sistema, opcional e vinculada ao Android Keystore. Android 8 usa senha. Alterar a biometria do aparelho pode exigir nova ativação pelo login com senha. Se a chave protegida anterior não puder ser usada, entre com a senha e ative novamente quando o app oferecer. O prompt do sistema pode pausar a tela de login sem cancelar a autenticação; sair de fato do app ou apagar a tela continua cancelando-a. Biometria facial sem classificação forte do Android não substitui a biometria forte exigida para liberar a chave.
 
 O bloqueio protege a interface; não adiciona criptografia própria ao banco financeiro. O Android mantém os arquivos no armazenamento privado do aplicativo. Backups exportados continuam sem criptografia; login, senhas, biometria e credenciais Meu Pluggy não são exportados.
 
 ## Conectar sua conta Meu Pluggy
 
-Abra **Painel → Contas conectadas** ou **Ajustes → Meu Pluggy** para consultar os dados dentro do app. A configuração inicial fica em **Configurar conexão**; a tela não abre um site. Autorize seus bancos no ambiente oficial do provedor quando necessário. Ter uma conta no Meu Pluggy não disponibiliza automaticamente a chave da API: espelhe suas conexões no Dashboard pelo conector **MeuPluggy** e preencha Client ID, Client Secret e os IDs dos itens no próprio aplicativo. Nunca envie essas credenciais no chat. Consulte o [passo a passo](docs/OPEN-FINANCE.md).
+Abra **Painel → Contas conectadas** ou **Ajustes → Meu Pluggy** para consultar os dados dentro do app. A configuração inicial fica em **Configurar conexão**; a tela não abre um site. Autorize seus bancos no ambiente oficial do provedor quando necessário. Ter uma conta no Meu Pluggy não disponibiliza automaticamente a chave da API: espelhe suas conexões no Dashboard pelo conector **MeuPluggy** e preencha Client ID, Client Secret e os IDs dos itens no próprio aplicativo. No app, **Onde encontrar os dados da conexão** mostra os caminhos do Dashboard e links oficiais. Client ID aparece em Applications; o Client Secret é mostrado somente ao gerar, e gerar outro invalida o anterior. O itemId fica em Demo → Connected Items → item. Nunca envie essas credenciais no chat. Consulte o [passo a passo](docs/OPEN-FINANCE.md).
+
+Ter uma conta Meu Pluggy não conecta automaticamente esta edição. O plano pessoal não oferece listagem geral de itens pela API; somente o login do portal não concede acesso de integração. Para retirar os campos Client ID/Secret e itemId seria necessário um projeto Pluggy Connect, servidor privado e pareamento seguro do aparelho. Essa infraestrutura não está implantada e não foi contratado plano pago. A autorização inicial das instituições no caminho pessoal continua no Meu Pluggy.
+
+Em **Configurar conexão → Gerar Connect Token**, use Client ID/Secret digitados ou as credenciais já salvas. Não exige itemId. O token de aproximadamente 30 minutos é mostrado temporariamente e serve ao Pluggy Connect; não substitui a apiKey de leitura nem conecta bancos automaticamente. Nenhum token real é incluído nesta distribuição.
 
 A consulta pessoal usa diretamente `https://api.pluggy.ai`, sem hospedagem própria. As credenciais do titular são criptografadas no aparelho com Android Keystore; nenhuma chave particular integra o APK ou o Git. Use somente aplicação/itens próprios. A gratuidade, os limites de conexões e a cobertura dependem das condições do provedor. O app não cria conta paga nem contrata serviço.
 
@@ -130,7 +134,7 @@ Identificadores `FITID`/`id` detectam reimportações na mesma conta. Sem identi
 
 PDF, fotos e formatos proprietários não são suportados. O CSV serve para planilhas e protege campos textuais contra fórmulas. O **backup JSON** preserva os dados originais e todos os vínculos, com limite de 8 MiB por backup nesta versão. Bases maiores exigem exportação CSV e não têm restauração integral suportada. Restaurar exige confirmação e substitui todo o conteúdo atual de forma transacional; backups inválidos são rejeitados sem apagar a base.
 
-Consulte o [registro de validação da 0.6.2](docs/VALIDACAO-0.6.2.md) para testes e limites da verificação.
+Consulte o [registro de validação da 0.6.3](docs/VALIDACAO-0.6.3.md) para testes e limites da verificação.
 
 ## Desenvolvimento
 
@@ -157,8 +161,8 @@ Comandos individuais:
 `verify.sh` executa testes, lint e build da única edição. APK gerado: `app/build/outputs/apk/debug/app-debug.apk`. Relatórios dos verificadores: `app/build/reports/`. Para atualizar a cópia distribuível após concluir a validação:
 
 ```sh
-cp app/build/outputs/apk/release/app-release.apk artifacts/MyFinanceHub-0.6.2-release.apk
-sha256sum artifacts/MyFinanceHub-0.6.2-release.apk > artifacts/MyFinanceHub-0.6.2-release.apk.sha256
+cp app/build/outputs/apk/release/app-release.apk artifacts/MyFinanceHub-0.6.3-release.apk
+sha256sum artifacts/MyFinanceHub-0.6.3-release.apk > artifacts/MyFinanceHub-0.6.3-release.apk.sha256
 ```
 
 No Android Studio, configure JDK compatível e SDK 35. `local.properties`, chaves e saídas de build são ignorados. Os testes substituem as consultas de mercado por respostas fictícias: montar e validar o APK não exige chave brapi, credenciais bancárias ou backend. A validação HTTPS opcional usa apenas símbolos públicos, sem dados pessoais.
@@ -176,4 +180,4 @@ O Android não está conectado a esse backend. A execução real depende de cada
 
 Siga o [roteiro de testes no Android](docs/TESTES-NO-CELULAR.md) para verificar atualização preservando dados, temas, importações, relatórios, compartilhamento e cotações. O roteiro é uma lista de verificações, não uma declaração de testes já realizados no seu aparelho.
 
-A leitura pessoal de contas e transações Meu Pluggy está implementada; requer credenciais e conexões autorizadas do titular. Pagamentos Pix, integração direta com carteiras e sincronização automática da custódia B3 não estão implementados. Notificações compatíveis geram somente sugestões para revisão; WhatsApp e transcrição não estão integrados. Documentos de validação de versões antigas permanecem como histórico; não descrevem as opções da 0.6.2.
+A leitura pessoal de contas e transações Meu Pluggy está implementada; requer credenciais e conexões autorizadas do titular. Pagamentos Pix, integração direta com carteiras e sincronização automática da custódia B3 não estão implementados. Notificações compatíveis geram somente sugestões para revisão; WhatsApp e transcrição não estão integrados. Documentos de validação de versões antigas permanecem como histórico; não descrevem as opções da 0.6.3.

@@ -13,7 +13,7 @@ import java.util.concurrent.*;
 public final class LoginActivity extends Activity {
     private LocalAuthStore auth;private AppAppearance.Palette colors;
     private final ExecutorService worker=Executors.newSingleThreadExecutor();private boolean destroyed,busy,resumed;private Runnable pendingCompletion;
-    private LinearLayout content;private Button submit,biometric;private EditText username,password,confirm;
+    private LinearLayout content;private Button submit,biometric;private EditText username,password,confirm;private TextView biometricHelp;
     @Override public void onCreate(Bundle state){setTheme(AppAppearance.themeRes(this));super.onCreate(state);colors=AppAppearance.palette(this);auth=new LocalAuthStore(this);getWindow().addFlags(WindowManager.LayoutParams.FLAG_SECURE);if(auth.configured()&&AuthSession.isUnlocked()){enter();return;}render();}
     private void render(){
         if(destroyed||isFinishing())return;
@@ -28,14 +28,28 @@ public final class LoginActivity extends Activity {
             if(setup){if(!Arrays.equals(pass,again)){Arrays.fill(pass,'\0');if(again!=null)Arrays.fill(again,'\0');message("As senhas não são iguais.");return;}Arrays.fill(again,'\0');run(()->{try{return auth.create(login,pass);}finally{Arrays.fill(pass,'\0');}},code->{if(AuthSession.unlockIfCurrent(attempt))showRecoveryCode(code,()->offerBiometrics());});}
             else run(()->{try{return auth.verify(login,pass);}finally{Arrays.fill(pass,'\0');}},valid->{if(valid){if(AuthSession.unlockIfCurrent(attempt))offerBiometrics();}else message("Login ou senha incorretos.");});
         });
-        biometric=button(content,"Entrar com biometria");biometric.setEnabled(!setup&&LocalBiometrics.enabled(this)&&LocalBiometrics.available(this));biometric.setOnClickListener(v->{if(busy||destroyed||isFinishing())return;long attempt=AuthSession.generation();LocalBiometrics.unlock(this,new LocalBiometrics.Callback(){public void success(){if(!destroyed&&!isFinishing()&&auth.configured()&&AuthSession.unlockIfCurrent(attempt))enter();}public void failure(String error){if(!destroyed&&!isFinishing())message(error);}});});
+        biometric=button(content,"Entrar com biometria");biometric.setOnClickListener(v->{if(busy||destroyed||isFinishing())return;LocalBiometrics.unlock(this,biometricCallback(AuthSession.generation()));});
+        biometricHelp=label(content,"",13);updateBiometricState();
         if(!setup){button(content,"Recuperar acesso com meu código").setOnClickListener(v->recover());}
         label(content,"Na criação, guarde o código de recuperação fora deste aparelho. Ele permite trocar a senha sem apagar os dados. Sem senha, biometria ou código, não há recuperação automática.",13);
     }
+    private void updateBiometricState(){
+        boolean available=LocalBiometrics.available(this),enabled=LocalBiometrics.enabled(this);
+        biometric.setEnabled(!busy&&auth.configured()&&available&&enabled);
+        if(biometricHelp!=null)biometricHelp.setText(!auth.configured()?"Crie o acesso com senha antes de ativar a biometria.":!available?"Biometria forte indisponível. Confira o bloqueio de tela e cadastre uma digital nas configurações de segurança do Android. Continue com sua senha.":!enabled?"Biometria ainda não ativada neste app. Entre com sua senha para ativá-la.":"Use a digital ou outra biometria forte cadastrada no Android. A senha continua disponível.");
+    }
+    LocalBiometrics.Callback biometricCallback(long attempt){return new LocalBiometrics.Callback(){
+        public void success(){complete(()->{if(auth.configured()&&AuthSession.unlockIfCurrent(attempt))enter();});}
+        public void failure(String error){complete(()->{if(attempt!=AuthSession.generation())return;updateBiometricState();message(error);});}
+    };}
     private void offerBiometrics(){
         if(destroyed||isFinishing()||!AuthSession.isUnlocked())return;
-        if(LocalBiometrics.available(this)&&!LocalBiometrics.enabled(this))new AlertDialog.Builder(this).setTitle("Usar biometria para entrar?").setMessage("A biometria cadastrada no Android poderá desbloquear este app. Você continuará podendo usar sua senha.").setNegativeButton("Agora não",(d,w)->enter()).setPositiveButton("Ativar",(d,w)->LocalBiometrics.enable(this,new LocalBiometrics.Callback(){public void success(){if(!destroyed&&!isFinishing())enter();}public void failure(String error){if(!destroyed&&!isFinishing()){message(error);}}})).setOnCancelListener(d->enter()).show();
+        if(LocalBiometrics.available(this)&&!LocalBiometrics.enabled(this))new AlertDialog.Builder(this).setTitle("Usar biometria para entrar?").setMessage("A biometria cadastrada no Android poderá desbloquear este app. Você continuará podendo usar sua senha.").setNegativeButton("Agora não",(d,w)->enter()).setPositiveButton("Ativar",(d,w)->LocalBiometrics.enable(this,new LocalBiometrics.Callback(){public void success(){complete(()->enter());}public void failure(String error){complete(()->showBiometricEnrollmentError(error));}})).setOnCancelListener(d->enter()).show();
         else enter();
+    }
+    private void showBiometricEnrollmentError(String error){
+        if(destroyed||isFinishing()||!AuthSession.isUnlocked())return;updateBiometricState();
+        new AlertDialog.Builder(this).setTitle("Ativar biometria").setMessage(error).setNegativeButton("Tentar novamente",(d,w)->offerBiometrics()).setPositiveButton("Continuar com senha",(d,w)->enter()).show();
     }
     private void enter(){if(destroyed||isFinishing()||!AuthSession.isUnlocked())return;
         boolean returning=getIntent().getBooleanExtra("return_to_activity",false);
@@ -64,14 +78,17 @@ public final class LoginActivity extends Activity {
     }
     private boolean finishAttempt(long attempt){
         if(destroyed||isFinishing())return false;
-        busy=false;submit.setEnabled(true);biometric.setEnabled(auth.configured()&&LocalBiometrics.enabled(this)&&LocalBiometrics.available(this));
+        busy=false;submit.setEnabled(true);updateBiometricState();
         // A result queued before a device/manual lock must never authorize a later session.
         return attempt==AuthSession.generation();
     }
     private void message(String message){if(destroyed||isFinishing())return;new AlertDialog.Builder(this).setTitle("Acesso local").setMessage(message==null?"Não foi possível concluir. Tente novamente.":message).setPositiveButton("OK",null).show();}
     private void complete(Runnable action){if(destroyed||isFinishing())return;if(resumed)action.run();else pendingCompletion=action;}
-    @Override protected void onResume(){super.onResume();if(destroyed||isFinishing())return;resumed=true;if(pendingCompletion!=null){Runnable action=pendingCompletion;pendingCompletion=null;action.run();}}
-    @Override protected void onPause(){resumed=false;LocalBiometrics.cancelPending();if(password!=null)password.setText("");if(confirm!=null)confirm.setText("");super.onPause();}
+    @Override protected void onResume(){super.onResume();if(destroyed||isFinishing())return;resumed=true;if(biometric!=null)updateBiometricState();if(pendingCompletion!=null){Runnable action=pendingCompletion;pendingCompletion=null;action.run();}}
+    @Override protected void onPause(){resumed=false;if(password!=null)password.setText("");if(confirm!=null)confirm.setText("");super.onPause();}
+    // Some system biometric prompts pause the host. Cancel only once the app is no longer visible;
+    // screen-off is handled immediately by FinanceApplication, independently of this lifecycle.
+    @Override protected void onStop(){LocalBiometrics.cancelPending();super.onStop();}
     @Override protected void onDestroy(){destroyed=true;LocalBiometrics.cancelPending();worker.shutdownNow();super.onDestroy();}
     @Override public void onBackPressed(){AuthSession.lock();finishAffinity();}
     private LinearLayout column(){LinearLayout v=new LinearLayout(this);v.setOrientation(LinearLayout.VERTICAL);return v;}

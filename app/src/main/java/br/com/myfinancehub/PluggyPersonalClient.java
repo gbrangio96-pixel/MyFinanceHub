@@ -33,7 +33,7 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 
-/** Personal, read-only Meu Pluggy access. Secrets are provided by the private device vault. */
+/** Personal Meu Pluggy reads and short-lived Connect tokens. Secrets stay in the private vault. */
 public final class PluggyPersonalClient {
     public static final String API_ORIGIN = "https://api.pluggy.ai";
     public static final int MAX_RESPONSE_BYTES = 2 * 1024 * 1024;
@@ -81,9 +81,13 @@ public final class PluggyPersonalClient {
         return Collections.unmodifiableList(new ArrayList<>(result));
     }
     public static void validateCredentials(String clientId, String clientSecret, List<String> itemIds) {
-        if (!credential(clientId) || clientId.length() > 256 || !credential(clientSecret))
-            throw new IllegalArgumentException(message("INVALID_CONFIG"));
+        validateCredentials(clientId, clientSecret);
         validateItems(itemIds);
+    }
+    /** Creating a Connect session needs project credentials, but no existing connection IDs. */
+    public static void validateCredentials(String clientId, String clientSecret) {
+        if (!credential(clientId) || clientId.length() > 256 || !credential(clientSecret))
+            throw new IllegalArgumentException(message("INVALID_CREDENTIALS"));
     }
     private static void validateItems(List<String> itemIds) {
         if (itemIds == null || itemIds.isEmpty() || itemIds.size() > 5)
@@ -100,6 +104,31 @@ public final class PluggyPersonalClient {
         return value != null && value.matches("[A-Za-z0-9_-]{1,128}");
     }
 
+    /** Returns an ephemeral Pluggy Connect token without persisting it or writing finances. */
+    public String createConnectToken(String clientId, String clientSecret) throws IOException {
+        validateCredentials(clientId, clientSecret);
+        Session session = new Session();
+        try {
+            authenticate(session, clientId, clientSecret);
+            return providerToken(session.request("/connect_token", new JSONObject()), "accessToken");
+        } catch (Failure failure) { throw failure; }
+        catch (JSONException | IllegalArgumentException error) { throw fail("INVALID_PROVIDER_DATA"); }
+    }
+
+    private static String providerToken(JSONObject response, String field) throws JSONException, Failure {
+        String value = string(response, field, 8192, false);
+        for (int i = 0; i < value.length(); i++) {
+            char character = value.charAt(i);
+            if (Character.isWhitespace(character) || Character.isSpaceChar(character)
+                    || Character.isISOControl(character)) throw fail("INVALID_PROVIDER_DATA");
+        }
+        return value;
+    }
+    private void authenticate(Session session, String clientId, String clientSecret) throws IOException, JSONException {
+        JSONObject body = new JSONObject().put("clientId", clientId).put("clientSecret", clientSecret);
+        session.apiKey = providerToken(session.request("/auth", body), "apiKey");
+    }
+
     /** All pages are normalized in memory. No partial snapshot or financial write is returned. */
     public PluggyClient.Snapshot fetch(String clientId, String clientSecret, List<String> itemIds,
                                       LocalDate from, LocalDate to) throws IOException {
@@ -111,11 +140,7 @@ public final class PluggyPersonalClient {
         List<String> items = new ArrayList<>(itemIds);
         Session session = new Session();
         try {
-            JSONObject authBody = new JSONObject().put("clientId", clientId).put("clientSecret", clientSecret);
-            JSONObject auth = session.request("/auth", authBody);
-            String apiKey = string(auth, "apiKey", 8192, false);
-            if (apiKey.matches("(?s).*[\\s\\x00-\\x1f\\x7f].*")) throw fail("INVALID_PROVIDER_DATA");
-            session.apiKey = apiKey;
+            authenticate(session, clientId, clientSecret);
             JSONArray connections = new JSONArray();
             Map<String, JSONObject> accounts = new LinkedHashMap<>(), transactions = new LinkedHashMap<>();
             Map<String, String> rawTransactions = new LinkedHashMap<>();
@@ -203,17 +228,17 @@ public final class PluggyPersonalClient {
             if (Thread.currentThread().isInterrupted() || left <= 0) throw fail("REQUEST_LIMIT");
             return (int) left;
         }
-        JSONObject request(String path, JSONObject authBody) throws IOException, JSONException {
+        JSONObject request(String path, JSONObject body) throws IOException, JSONException {
             int timeout = Math.min(REQUEST_TIMEOUT, remaining());
             if (++requests > MAX_REQUESTS) throw fail("REQUEST_LIMIT");
             Map<String, String> headers = new LinkedHashMap<>();
             headers.put("Accept", "application/json");
-            if (authBody != null) headers.put("Content-Type", "application/json");
-            else headers.put("X-API-KEY", apiKey);
+            if (body != null) headers.put("Content-Type", "application/json");
+            if (apiKey != null) headers.put("X-API-KEY", apiKey);
             Response response;
             try {
-                response = transport.request(authBody == null ? "GET" : "POST", URI.create(API_ORIGIN + path),
-                        Collections.unmodifiableMap(headers), authBody == null ? null : authBody.toString(), timeout);
+                response = transport.request(body == null ? "GET" : "POST", URI.create(API_ORIGIN + path),
+                        Collections.unmodifiableMap(headers), body == null ? null : body.toString(), timeout);
             } catch (IOException | RuntimeException error) { throw fail("PROVIDER_UNAVAILABLE"); }
             remaining();
             if (response == null || response.status < 200 || response.status >= 300) throw fail("PROVIDER_UNAVAILABLE");
@@ -359,6 +384,7 @@ public final class PluggyPersonalClient {
     private static Failure fail(String code) { return new Failure(code); }
     private static String message(String code) {
         switch (code) {
+            case "INVALID_CREDENTIALS": return "Meu Pluggy: confira Client ID e Client Secret da sua aplicação pessoal.";
             case "INVALID_CONFIG": return "Meu Pluggy: confira Client ID, Client Secret e de 1 a 5 itemIds próprios, sem repetir conexões.";
             case "INVALID_RANGE": return "Meu Pluggy: escolha um período de até 90 dias, sem data final futura.";
             case "REQUEST_LIMIT": return "Meu Pluggy: limite seguro da consulta excedido. Reduza o período ou as conexões.";
